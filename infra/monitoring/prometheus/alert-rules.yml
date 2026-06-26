@@ -1,0 +1,41 @@
+groups:
+  - name: sut-slos
+    interval: 30s
+    rules:
+      - alert: SLOErrorRateBreach
+        expr: |
+          (
+            rate(http_errors_total[5m])
+            /
+            (rate(http_requests_total[5m]) + 1e-9)
+          ) > 0.01
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SLO error rate breach"
+          description: "Error rate {{ $value | humanizePercentage }} exceeds 1% SLO"
+
+      - alert: SLOP95LatencyBreach
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{route="/fast"}[5m])
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency breach on /fast"
+          description: "p95={{ $value }}s, SLO=50ms"
+
+  - name: fleet
+    interval: 30s
+    rules:
+      - alert: FleetCPUSaturation
+        expr: rate(process_cpu_seconds_total[1m]) > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Fleet CPU saturation — test results may be INCONCLUSIVE"
+          description: "Worker CPU usage {{ $value }} > 80%"

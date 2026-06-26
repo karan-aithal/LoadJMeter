@@ -1,0 +1,68 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Kubernetes / Helm
+*.kubeconfig
+kubeconfig
+infra/k8s/helm/charts/
+infra/k8s/helm/*.lock
+
+# Terraform (if added later)
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# LocalStack data
+.localstack/
+
+# Postgres data volumes
+pgdata/
+
+# k6 results
+results/
+*.json.gz
+
+# Temporary files
+*.tmp
+*.swp
+*.bak
