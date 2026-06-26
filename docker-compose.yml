@@ -51,3 +51,24 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
+
+  # ── Phase 1 worker — run manually, not started by default ──────────────────
+  # Usage:
+  #   docker compose run --rm worker                          # base scenario
+  #   docker compose run --rm -e VUS=50 worker run /scripts/k6/fast-endpoint.js
+  worker:
+    build:
+      context: ./services/worker
+      dockerfile: Dockerfile
+    image: loadtest/worker:latest
+    profiles: [worker]
+    environment:
+      SUT_URL:   http://sut:3000
+      VUS:       ${VUS:-10}
+      RAMP_UP:   ${RAMP_UP:-10s}
+      DURATION:  ${DURATION:-30s}
+      RAMP_DOWN: ${RAMP_DOWN:-10s}
+    depends_on:
+      sut:
+        condition: service_healthy
+    restart: "no"
