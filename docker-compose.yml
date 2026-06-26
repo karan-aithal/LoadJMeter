@@ -51,7 +51,66 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
+  # ── Phase 2: Postgres ────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-loadtest}
+      POSTGRES_USER:     ${POSTGRES_USER:-loadtest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-loadtest}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  control-api:
+    build:
+      context: ./services/control-api
+      dockerfile: Dockerfile
+    image: loadtest/control-api:latest
+    container_name: control-api
+    ports:
+      - "${CONTROL_API_PORT:-4000}:4000"
+    environment:
+      PORT:           4000
+      DATABASE_URL:   postgresql://${POSTGRES_USER:-loadtest}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-loadtest}
+      REDIS_URL:      redis://redis:6379
+      JWT_SECRET:     ${JWT_SECRET}
+      API_KEY:        ${API_KEY}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      MAX_VUS:        ${MAX_VUS:-500}
+      MAX_DURATION_S: ${MAX_DURATION_S:-3600}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
   # ── Phase 1 worker — run manually, not started by default ──────────────────
   # Usage:
   #   docker compose run --rm worker                          # base scenario
@@ -72,3 +131,6 @@ services:
       sut:
         condition: service_healthy
     restart: "no"
+
+volumes:
+  postgres_data:
