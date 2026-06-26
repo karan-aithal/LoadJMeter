@@ -1,0 +1,351 @@
+ # Distributed Load Testing Platform — Build Prompt (Phased) + Repo Structure
+
+CAVEMAN MODE ON.
+- No filler. No politeness. No repeat.
+- Short sentences. Keywords + symbols (→ = vs).
+- Assume user smart, some K8s exp.
+- Shortest correct answer only. Explain only if asked.
+
+STACK: local K8s (minikube/kind) + k6 workers + SQS-compatible queue (LocalStack, $0) + KEDA autoscale + Prometheus/Grafana + custom toy app as SUT. Multi-region sim via tagged namespaces. RBAC (K8s + app-level). Cost tracking simulated.
+
+GOAL: build in phases. Each phase = runnable artifact. No skip ahead.
+
+---
+
+## PHASE 0 — SUT (toy app)
+- Build small API (Node/Express or Python/FastAPI). Pick one, stick with it.
+- 3 endpoints min: fast, slow (artificial delay), CPU-heavy (fib/prime calc).
+- Health endpoints: `/healthz` (liveness), `/readyz` (readiness) — separate concerns.
+- Structured JSON logs. Include trace_id per request.
+- Expose `/metrics` (Prometheus): latency histogram, req count, error count, in-flight gauge.
+- Define SLOs upfront: e.g. p95 < 200ms, error rate < 1%. Write down → pass/fail criteria later.
+- Dockerize: multi-stage build, non-root user, pinned base image digest.
+- docker-compose up → confirm /metrics scrapeable + SLOs measurable.
+
+OUTPUT: SUT container + Dockerfile + /metrics + health checks + documented SLOs.
+
+---
+
+## PHASE 1 — Single worker, manual run
+- Write k6 script. Target SUT endpoints. Configurable VUs/duration/ramp via env vars.
+- Use k6 `thresholds`: tie to SUT SLOs (p95, error rate) → script exits non-zero on breach. CI-usable later.
+- Stages: ramp-up → steady → ramp-down. Not flat spike — realistic profile.
+- Dockerize k6 + script → "worker" image. Pin k6 version.
+- Run manually: confirm load registers in SUT metrics + threshold pass/fail reported.
+
+OUTPUT: worker image, threshold-driven pass/fail, manual single-run proof.
+
+---
+
+## PHASE 2 — Control plane (API)
+- Build control API. Auth: API key or JWT — no open endpoints, even local.
+- Endpoints: POST /tests (idempotency key required) → GET /tests/:id → GET /tests (paginated) → DELETE /tests/:id (cancel).
+- Input validation: reject bad VU counts/durations (guardrails — don't let user nuke own laptop or prod by accident).
+- Postgres: use migrations (Flyway/Alembic/Prisma) — not manual SQL. Schema versioned from day 1.
+- On POST /tests → push job to queue (idempotent enqueue — dedupe on key).
+- Add OpenAPI/Swagger spec — contract before code, or generated from code.
+
+OUTPUT: authenticated control API + versioned schema + jobs landing in queue + API spec.
+
+---
+
+## PHASE 3 — Worker pulls from queue
+- Worker: on boot, pull job (atomic — no double-pickup).
+- Graceful shutdown: SIGTERM → finish/abort current run cleanly, don't orphan job.
+- Retry policy: failed job → retry N times → then dead-letter queue (don't retry forever).
+- Heartbeat to control API (job alive/stalled detection).
+- Run 2-3 workers manually (compose scale) → confirm distribution, no double-pickup, dead-letter works (kill worker mid-job, verify recovery).
+
+OUTPUT: queue-driven fleet, graceful shutdown, retry + dead-letter, crash-tested.
+
+---
+
+## PHASE 4 — Metrics + dual dashboards + alerting
+- Prometheus scrapes SUT + worker /metrics (k6 via xk6-prometheus or experimental-rtm output).
+- Apply RED method on SUT (Rate, Errors, Duration) + USE method on fleet (Utilization, Saturation, Errors).
+- Grafana: "Fleet" (worker count, VUs, CPU/mem sat) + "SUT" (p50/p95/p99, error rate, throughput) + correlate timeline (test start/stop annotations).
+- Alerting rules (Alertmanager or Grafana alerts): fleet CPU saturation >80% → flag results unreliable. SUT error rate breach → flag SLO violation.
+- Result must self-report verdict: PASS/FAIL/INCONCLUSIVE (inconclusive = fleet was bottleneck, not SUT).
+
+OUTPUT: Prometheus+Grafana stack, RED/USE dashboards, alerting, automatic test verdicts.
+
+---
+
+## PHASE 5 — Move to K8s
+- minikube/kind cluster. Use Helm charts (or Kustomize) — not raw YAML pile.
+- Namespace isolation: `loadtest-system` namespace.
+- Resource requests/limits on every Deployment (esp. worker — uncapped k6 can starve node).
+- NetworkPolicy: worker fleet can reach SUT + queue only, nothing else.
+- Secrets via K8s Secrets (or sealed-secrets) — never hardcode in manifests.
+- ConfigMaps for non-secret config.
+- Deploy SUT, control API, Postgres, queue, Prometheus, Grafana.
+- Manual `kubectl scale` worker Deployment → confirm queue-driven pickup works in-cluster.
+
+OUTPUT: Helm-deployed stack, namespaced, resource-limited, network-policed, manual scale verified.
+
+---
+
+## PHASE 6 — Autoscale (KEDA)
+- Install KEDA.
+- ScaledObject on worker Deployment: trigger = queue length.
+- Set minReplicas, maxReplicas (cap — don't let fleet eat whole cluster). Cooldown period to avoid flapping.
+- PodDisruptionBudget — scale-down doesn't kill in-flight test runs.
+- Load queue → confirm auto scale-up → idle → confirm scale-down to min.
+- Chaos check: kill a worker pod mid-scale, confirm job requeues (ties back to Phase 3 dead-letter/retry).
+
+OUTPUT: KEDA autoscaling, capped + cooldown-controlled, PDB-protected, chaos-tested.
+
+---
+
+## PHASE 7 — UI polish
+- React dashboard: form to launch test (validated) → live status (poll or SSE/WS) → embed Grafana panels → history table → cancel/delete run.
+- Show verdict (PASS/FAIL/INCONCLUSIVE) front and center per run.
+
+OUTPUT: usable UI, end-to-end demo-able platform.
+
+---
+
+## PHASE 8 — Industry polish (CI/CD + docs + security)
+- CI pipeline (GitHub Actions): lint → unit test → build images → run Phase-1-style k6 smoke test against ephemeral SUT in CI.
+- Image scanning (Trivy/Grype) in CI — no critical CVEs shipped.
+- README per service: how to run, env vars, architecture diagram.
+- Runbook: "queue stuck", "worker crash loop", "SLO breach" — what to check, in order.
+- `.env.example` — never commit real secrets/.env.
+- Tag versions (semver) on releases.
+
+OUTPUT: CI-gated, scanned, documented, runbook-backed platform — portfolio/production ready.
+
+---
+
+## PHASE 9 — Multi-region + RBAC + cost controls + managed queue (zero-cost sim)
+- **Queue swap:** Redis → SQS-compatible via LocalStack (free, Docker). Control API + worker talk real AWS SDK calls — code is prod-portable, backend is local.
+- **Multi-region sim:** spin 2-3 kind clusters (or namespaces) tagged `region: us-east|eu-west|ap-south`. Control API routes test jobs to region-tagged queues. Fleet metrics dashboard splits by region.
+- **RBAC (real, free):** K8s Roles/RoleBindings — `viewer` (read dashboards/results only), `operator` (launch/cancel tests), `admin` (deploy/scale). Control API enforces same 3 roles via JWT claims, not just K8s.
+- **Cost controls (simulated):** track worker-hours × assumed $/hr (e.g. $0.05) per test run → running total in Grafana panel → alert rule fires at spend threshold. Real math, fake invoice — swap in real Cost Explorer API later, zero code change to the model.
+- **Budget guardrail:** control API rejects new test launch if projected cost > configurable cap (forces cost-awareness at design time, not just after).
+
+OUTPUT: region-aware fleet, RBAC-enforced (K8s + app level), cost-tracked + budget-capped runs, SQS-compatible queue — all $0, all swappable to real cloud later.
+
+---
+
+## RULES THROUGHOUT
+- Each phase: working artifact before next phase starts.
+- No premature optimization. No skipping race-condition/crash checks.
+- Every config: env var or file — never hardcoded magic number.
+- Every secret: vault/K8s secret — never in repo.
+- If stuck >1 phase: state phase num + blocker, ask for help on that phase only.
+
+---
+
+# Repository Structure
+
+```
+distributed-load-test-platform/
+├── README.md
+├── LICENSE
+├── .gitignore
+├── .env.example
+├── docker-compose.yml
+├── docker-compose.k8s-local.yml
+├── docker-compose.localstack.yml          # SQS emulator, free (Phase 9)
+├── Makefile
+│
+├── docs/
+│   ├── architecture.md
+│   ├── architecture-diagram.png
+│   ├── slo.md
+│   ├── runbooks/
+│   │   ├── queue-stuck.md
+│   │   ├── worker-crash-loop.md
+│   │   └── slo-breach.md
+│   └── api-spec/
+│       └── openapi.yaml
+│
+├── services/
+│   │
+│   ├── sut/                              # Phase 0 — System Under Test
+│   │   ├── Dockerfile
+│   │   ├── package.json
+│   │   ├── src/
+│   │   │   ├── index.js
+│   │   │   ├── routes/
+│   │   │   │   ├── fast.js
+│   │   │   │   ├── slow.js
+│   │   │   │   └── cpu-heavy.js
+│   │   │   ├── health/
+│   │   │   │   ├── healthz.js
+│   │   │   │   └── readyz.js
+│   │   │   ├── metrics/
+│   │   │   │   └── prometheus.js
+│   │   │   ├── logger/
+│   │   │   │   └── logger.js
+│   │   │   └── middleware/
+│   │   │       └── trace-id.js
+│   │   └── test/
+│   │       └── routes.test.js
+│   │
+│   ├── control-api/                      # Phase 2 — Control plane
+│   │   ├── Dockerfile
+│   │   ├── package.json
+│   │   ├── src/
+│   │   │   ├── index.js
+│   │   │   ├── routes/
+│   │   │   │   ├── tests.js              # POST/GET/DELETE /tests
+│   │   │   │   └── auth.js
+│   │   │   ├── middleware/
+│   │   │   │   ├── auth.js               # API key / JWT
+│   │   │   │   ├── idempotency.js
+│   │   │   │   └── validate.js
+│   │   │   ├── auth/
+│   │   │   │   ├── jwt.js
+│   │   │   │   └── rbac.js               # viewer/operator/admin (Phase 9)
+│   │   │   ├── queue/
+│   │   │   │   ├── sqs-producer.js       # LocalStack-backed (Phase 9)
+│   │   │   │   └── region-router.js      # routes job → region queue (Phase 9)
+│   │   │   ├── cost/
+│   │   │   │   ├── cost-estimator.js     # worker-hrs × $/hr (Phase 9)
+│   │   │   │   └── budget-guard.js       # reject if over cap (Phase 9)
+│   │   │   ├── db/
+│   │   │   │   ├── client.js
+│   │   │   │   └── repositories/
+│   │   │   │       └── test-run-repo.js
+│   │   │   └── openapi/
+│   │   │       └── generate.js
+│   │   ├── migrations/
+│   │   │   ├── 001_init.sql
+│   │   │   ├── 002_test_runs.sql
+│   │   │   ├── 003_indexes.sql
+│   │   │   └── 004_cost_tracking.sql     # Phase 9
+│   │   └── test/
+│   │       └── tests-route.test.js
+│   │
+│   ├── worker/                           # Phase 1/3 — Test fleet
+│   │   ├── Dockerfile
+│   │   ├── package.json
+│   │   ├── scripts/
+│   │   │   ├── k6/
+│   │   │   │   ├── base-scenario.js
+│   │   │   │   ├── fast-endpoint.js
+│   │   │   │   ├── slow-endpoint.js
+│   │   │   │   └── cpu-heavy.js
+│   │   │   └── thresholds.js
+│   │   ├── src/
+│   │   │   ├── index.js                  # boot, pull job
+│   │   │   ├── queue/
+│   │   │   │   ├── sqs-consumer.js       # LocalStack-backed (Phase 9)
+│   │   │   │   └── dead-letter.js
+│   │   │   ├── runner/
+│   │   │   │   ├── k6-runner.js
+│   │   │   │   └── result-parser.js
+│   │   │   ├── lifecycle/
+│   │   │   │   └── graceful-shutdown.js  # SIGTERM handling
+│   │   │   ├── heartbeat/
+│   │   │   │   └── heartbeat.js
+│   │   │   └── metrics/
+│   │   │       └── prometheus-exporter.js
+│   │   └── test/
+│   │       └── runner.test.js
+│   │
+│   └── ui/                               # Phase 7 — Dashboard
+│       ├── Dockerfile
+│       ├── package.json
+│       ├── public/
+│       │   └── index.html
+│       └── src/
+│           ├── App.jsx
+│           ├── api/
+│           │   └── client.js
+│           ├── components/
+│           │   ├── TestForm.jsx
+│           │   ├── TestHistoryTable.jsx
+│           │   ├── LiveStatus.jsx
+│           │   ├── VerdictBadge.jsx
+│           │   └── GrafanaEmbed.jsx
+│           └── pages/
+│               ├── Dashboard.jsx
+│               └── TestDetail.jsx
+│
+├── infra/
+│   │
+│   ├── docker/
+│   │   └── base-images/
+│   │       └── node-base.Dockerfile
+│   │
+│   ├── localstack/                       # Phase 9 — $0 SQS emulator
+│   │   └── init-sqs-queues.sh            # creates region-tagged queues on boot
+│   │
+│   ├── k8s/                              # Phase 5
+│   │   ├── namespace.yaml
+│   │   ├── helm/
+│   │   │   ├── Chart.yaml
+│   │   │   ├── values.yaml
+│   │   │   ├── values-local.yaml
+│   │   │   └── templates/
+│   │   │       ├── sut-deployment.yaml
+│   │   │       ├── control-api-deployment.yaml
+│   │   │       ├── worker-deployment.yaml
+│   │   │       ├── postgres-statefulset.yaml
+│   │   │       ├── queue-deployment.yaml
+│   │   │       ├── prometheus-deployment.yaml
+│   │   │       ├── grafana-deployment.yaml
+│   │   │       ├── services.yaml
+│   │   │       ├── configmaps.yaml
+│   │   │       ├── secrets.yaml
+│   │   │       ├── networkpolicy.yaml
+│   │   │       ├── resource-limits.yaml
+│   │   │       └── pdb.yaml
+│   │   ├── regions/                      # Phase 9 — multi-region sim
+│   │   │   ├── us-east/
+│   │   │   │   └── values-region.yaml
+│   │   │   ├── eu-west/
+│   │   │   │   └── values-region.yaml
+│   │   │   └── ap-south/
+│   │   │       └── values-region.yaml
+│   │   ├── rbac/                         # Phase 9
+│   │   │   ├── role-viewer.yaml
+│   │   │   ├── role-operator.yaml
+│   │   │   ├── role-admin.yaml
+│   │   │   └── rolebindings.yaml
+│   │   └── keda/                         # Phase 6
+│   │       ├── scaledobject-worker.yaml
+│   │       └── trigger-auth-queue.yaml
+│   │
+│   ├── monitoring/                       # Phase 4
+│   │   ├── prometheus/
+│   │   │   ├── prometheus.yml
+│   │   │   └── alert-rules.yml
+│   │   ├── alertmanager/
+│   │   │   └── alertmanager.yml
+│   │   └── grafana/
+│   │       ├── provisioning/
+│   │       │   ├── datasources.yml
+│   │       │   └── dashboards.yml
+│   │       └── dashboards/
+│   │           ├── fleet-dashboard.json
+│   │           ├── sut-dashboard.json
+│   │           ├── cost-tracking.json    # Phase 9
+│   │           └── fleet-by-region.json  # Phase 9
+│   │
+│   └── scripts/
+│       ├── seed-db.sh
+│       ├── load-queue-test.sh
+│       └── chaos-kill-worker.sh
+│
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                        # lint, test, build, scan
+│       └── k6-smoke-test.yml
+│
+└── shared/
+    ├── types/
+    │   └── test-config.ts
+    └── constants/
+        └── queue-keys.js
+```
+
+## Notes
+- LocalStack → real AWS SQS later = change `AWS_ENDPOINT_URL` env var only. No code touches.
+- `region-router.js` falls back to single region if test config has no region tag (back-compat with Phase 0-8 builds).
+- `budget-guard.js` runs **before** enqueue — rejection at API layer, not after wasting fleet spin-up.
+- RBAC enforced twice on purpose: K8s RBAC = infra access control (who can `kubectl scale`). App-level RBAC = business action control (who can launch a $-costing test). Different blast radii.
+- `migrations/` lives in `control-api` only — single owner of schema, avoids split-brain migrations.
