@@ -4,6 +4,12 @@ const jwt = require('jsonwebtoken');
 const logger = require('../logger');
 
 module.exports = function authenticate(req, res, next) {
+  const apiKeyHeader = req.headers['x-api-key'];
+  if (apiKeyHeader && process.env.API_KEY && apiKeyHeader === process.env.API_KEY) {
+    req.user = { sub: 'internal-worker', role: 'worker' };
+    return next();
+  }
+
   const header = req.headers['authorization'] || '';
   const [scheme, token] = header.split(' ');
 

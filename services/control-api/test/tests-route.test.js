@@ -21,6 +21,7 @@ const TOKEN = jwt.sign(
   { expiresIn: '1h' }
 );
 const AUTH = `Bearer ${TOKEN}`;
+const INTERNAL_API_KEY = 'test-api-key';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 describe('POST /auth/token', () => {
@@ -171,5 +172,63 @@ describe('DELETE /tests/:id', () => {
     expect(
       (await request(app).delete('/tests/uuid-5').set('Authorization', AUTH)).status
     ).toBe(409);
+  });
+});
+
+// ── PATCH /tests/:id/status (worker/internal) ───────────────────────────────
+describe('PATCH /tests/:id/status', () => {
+  it('401 without auth', async () => {
+    const res = await request(app)
+      .patch('/tests/uuid-6/status')
+      .send({ status: 'running' });
+    expect(res.status).toBe(401);
+  });
+
+  it('200 with x-api-key internal auth', async () => {
+    repo.findById.mockResolvedValue({ id: 'uuid-6', status: 'pending' });
+    repo.updateStatus.mockResolvedValue({ id: 'uuid-6', status: 'running' });
+
+    const res = await request(app)
+      .patch('/tests/uuid-6/status')
+      .set('x-api-key', INTERNAL_API_KEY)
+      .send({ status: 'running', workerId: 'worker-1' });
+
+    expect(res.status).toBe(200);
+    expect(repo.updateStatus).toHaveBeenCalledWith('uuid-6', expect.objectContaining({
+      status: 'running',
+      workerId: 'worker-1',
+    }));
+  });
+});
+
+// ── POST /tests/:id/heartbeat (worker/internal) ─────────────────────────────
+describe('POST /tests/:id/heartbeat', () => {
+  it('404 for unknown run', async () => {
+    repo.findById.mockResolvedValue(null);
+    const res = await request(app)
+      .post('/tests/uuid-nope/heartbeat')
+      .set('x-api-key', INTERNAL_API_KEY)
+      .send({ workerId: 'worker-1' });
+    expect(res.status).toBe(404);
+  });
+
+  it('200 records heartbeat metadata', async () => {
+    repo.findById.mockResolvedValue({ id: 'uuid-7', status: 'running' });
+    repo.updateStatus.mockResolvedValue({
+      id: 'uuid-7',
+      status: 'running',
+      updated_at: new Date().toISOString(),
+    });
+
+    const res = await request(app)
+      .post('/tests/uuid-7/heartbeat')
+      .set('x-api-key', INTERNAL_API_KEY)
+      .send({ workerId: 'worker-2' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('ok');
+    expect(repo.updateStatus).toHaveBeenCalledWith('uuid-7', expect.objectContaining({
+      workerId: 'worker-2',
+    }));
   });
 });

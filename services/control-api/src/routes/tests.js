@@ -73,4 +73,53 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// PATCH /tests/:id/status — internal worker status update
+router.patch('/:id/status', auth, async (req, res) => {
+  try {
+    const run = await repo.findById(req.params.id);
+    if (!run) return res.status(404).json({ error: 'Not found' });
+
+    const {
+      status,
+      verdict,
+      workerId,
+      errorMessage,
+      startedAt,
+      completedAt,
+    } = req.body;
+
+    const updated = await repo.updateStatus(req.params.id, {
+      status,
+      verdict,
+      workerId,
+      errorMessage,
+      startedAt,
+      completedAt,
+    });
+
+    return res.json(updated);
+  } catch (err) {
+    logger.error('PATCH /tests/:id/status error', { error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /tests/:id/heartbeat — internal worker heartbeat
+router.post('/:id/heartbeat', auth, async (req, res) => {
+  try {
+    const run = await repo.findById(req.params.id);
+    if (!run) return res.status(404).json({ error: 'Not found' });
+
+    const workerId = req.body.workerId || req.query.workerId || null;
+    const updated = await repo.updateStatus(req.params.id, {
+      workerId,
+    });
+
+    return res.json({ status: 'ok', id: updated.id, updatedAt: updated.updated_at });
+  } catch (err) {
+    logger.error('POST /tests/:id/heartbeat error', { error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

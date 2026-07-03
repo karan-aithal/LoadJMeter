@@ -98,6 +98,53 @@ const spec = {
         },
       },
     },
+    '/tests/{id}/status': {
+      patch: {
+        summary: 'Internal worker status update', tags: ['Tests'],
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string', enum: ['pending','running','completed','failed','cancelled'] },
+                  verdict: { type: 'string', enum: ['PASS','FAIL','INCONCLUSIVE'], nullable: true },
+                  workerId: { type: 'string' },
+                  errorMessage: { type: 'string', nullable: true },
+                  startedAt: { type: 'string', format: 'date-time' },
+                  completedAt: { type: 'string', format: 'date-time' },
+                },
+              },
+            },
+          },
+        },
+        responses: { 200: { description: 'Updated test run' }, 404: { description: 'Not found' } },
+      },
+    },
+    '/tests/{id}/heartbeat': {
+      post: {
+        summary: 'Internal worker heartbeat', tags: ['Tests'],
+        security: [{ bearerAuth: [] }],
+        parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  workerId: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: { 200: { description: 'Heartbeat accepted' }, 404: { description: 'Not found' } },
+      },
+    },
   },
 };
 
