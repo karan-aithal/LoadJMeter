@@ -26,7 +26,16 @@ function resolveScript(scenario) {
 
 function runK6(config) {
 	const scriptPath = resolveScript(config.scenario);
-	const child = spawn('k6', ['run', scriptPath], {
+	const args = ['run'];
+
+	// Push k6 runtime metrics to Prometheus if remote-write URL is configured.
+	if (process.env.K6_PROMETHEUS_RW_SERVER_URL) {
+		args.push('--out', 'experimental-prometheus-rw');
+	}
+
+	args.push(scriptPath);
+
+	const child = spawn('k6', args, {
 		env: buildEnv(config),
 		stdio: ['ignore', 'pipe', 'pipe'],
 	});

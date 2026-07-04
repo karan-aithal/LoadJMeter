@@ -33,8 +33,20 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
     depends_on:
       - sut
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./infra/monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
     restart: unless-stopped
 
   grafana:
@@ -124,6 +136,10 @@ services:
       SUT_URL: http://sut:3000
       HEARTBEAT_INTERVAL_MS: ${HEARTBEAT_INTERVAL_MS:-5000}
       MAX_RETRIES: ${MAX_RETRIES:-3}
+      WORKER_METRICS_PORT: 9464
+      # k6 pushes runtime metrics to Prometheus via remote-write
+      K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
     depends_on:
       sut:
         condition: service_healthy

@@ -16,7 +16,7 @@ groups:
           summary: "SLO error rate breach"
           description: "Error rate {{ $value | humanizePercentage }} exceeds 1% SLO"
 
-      - alert: SLOP95LatencyBreach
+      - alert: SLOP95FastBreach
         expr: |
           histogram_quantile(0.95,
             rate(http_request_duration_seconds_bucket{route="/fast"}[5m])
@@ -25,8 +25,32 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "p95 latency breach on /fast"
-          description: "p95={{ $value }}s, SLO=50ms"
+          summary: "p95 latency breach on /fast (SLO 50ms)"
+          description: "p95={{ $value | humanizeDuration }}"
+
+      - alert: SLOP95SlowBreach
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{route="/slow"}[5m])
+          ) > 0.4
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency breach on /slow (SLO 400ms)"
+          description: "p95={{ $value | humanizeDuration }}"
+
+      - alert: SLOP95CpuHeavyBreach
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{route="/cpu-heavy"}[5m])
+          ) > 2.0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency breach on /cpu-heavy (SLO 2s)"
+          description: "p95={{ $value | humanizeDuration }}"
 
   - name: fleet
     interval: 30s
@@ -38,7 +62,7 @@ groups:
           severity: warning
         annotations:
           summary: "Fleet CPU saturation — test results may be INCONCLUSIVE"
-          description: "Worker CPU usage {{ $value }} > 80%"
+          description: "Max worker CPU saturation {{ $value | humanizePercentage }} > 80%"
 
       - alert: WorkerFleetDown
         expr: sum(up{job="worker"}) < 1
@@ -46,5 +70,14 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "No active worker metrics target"
+          summary: "No active worker metrics targets"
           description: "Worker fleet appears down or unreachable for >1m"
+
+      - alert: WorkerHeartbeatFailureSpike
+        expr: increase(worker_heartbeat_failures_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker heartbeat failure spike"
+          description: "{{ $value }} heartbeat failures in last 5m — jobs may be stalling"

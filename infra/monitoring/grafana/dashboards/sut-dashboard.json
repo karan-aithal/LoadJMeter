@@ -1,26 +1,149 @@
 {
-	"annotations": {
-		"list": [
-			{
-				"builtIn": 1,
-				"datasource": {
-					"type": "grafana",
-					"uid": "-- Grafana --"
-				},
-				"enable": true,
-				"hide": true,
-				"iconColor": "rgba(0, 211, 255, 1)",
-				"name": "Annotations & Alerts",
-				"type": "dashboard"
-			}
-		]
-	},
-	"editable": true,
-	"fiscalYearStartMonth": 0,
-	"graphTooltip": 0,
-	"id": null,
-	"links": [],
-	"panels": [
+  "title": "LoadTest SUT (RED)",
+  "uid": "loadtest-sut",
+  "tags": ["loadtest", "sut"],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "time": { "from": "now-30m", "to": "now" },
+  "editable": true,
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true, "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts", "type": "dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Rate (RPS)",
+      "description": "RED: Rate",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [{ "expr": "sum(rate(http_requests_total[1m]))", "legendFormat": "rps", "refId": "A" }]
+    },
+    {
+      "id": 2, "type": "stat", "title": "Error Rate",
+      "description": "RED: Errors — SLO < 1%",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 0.005 }, { "color": "red", "value": 0.01 }] } }, "overrides": [] },
+      "targets": [{ "expr": "sum(rate(http_errors_total[1m])) / (sum(rate(http_requests_total[1m])) + 1e-9)", "legendFormat": "error %", "refId": "A" }]
+    },
+    {
+      "id": 3, "type": "stat", "title": "p95 Latency (/fast)",
+      "description": "RED: Duration — SLO < 50ms",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "colorMode": "background", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 0.04 }, { "color": "red", "value": 0.05 }] } }, "overrides": [] },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{route=\"/fast\"}[2m])) by (le))", "legendFormat": "p95 /fast", "refId": "A" }]
+    },
+    {
+      "id": 4, "type": "stat", "title": "In-Flight Requests",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [{ "expr": "sum(http_in_flight_requests)", "legendFormat": "in-flight", "refId": "A" }]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Rate — Throughput by Endpoint",
+      "description": "RED: Rate",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total{route=\"/fast\"}[1m]))", "legendFormat": "/fast", "refId": "A" },
+        { "expr": "sum(rate(http_requests_total{route=\"/slow\"}[1m]))", "legendFormat": "/slow", "refId": "B" },
+        { "expr": "sum(rate(http_requests_total{route=\"/cpu-heavy\"}[1m]))", "legendFormat": "/cpu-heavy", "refId": "C" }
+      ]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Errors — 5xx Rate by Endpoint",
+      "description": "RED: Errors",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(http_errors_total[1m])) by (route)", "legendFormat": "{{route}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Duration — Latency Percentiles (all routes)",
+      "description": "RED: Duration — p50/p95/p99",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[2m])) by (le))", "legendFormat": "p50 all", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[2m])) by (le))", "legendFormat": "p95 all", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[2m])) by (le))", "legendFormat": "p99 all", "refId": "C" },
+        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{route=\"/fast\"}[2m])) by (le))", "legendFormat": "p95 /fast (SLO 50ms)", "refId": "D" },
+        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{route=\"/slow\"}[2m])) by (le))", "legendFormat": "p95 /slow (SLO 400ms)", "refId": "E" },
+        { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{route=\"/cpu-heavy\"}[2m])) by (le))", "legendFormat": "p95 /cpu-heavy (SLO 2s)", "refId": "F" }
+      ]
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Fleet Saturation Overlay (INCONCLUSIVE risk)",
+      "description": "Correlate: when this spikes > 0.8 test verdicts become INCONCLUSIVE",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "max": 1 },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "saturation threshold" },
+            "properties": [{ "id": "custom.lineStyle", "value": { "dash": [10, 5], "fill": "dash" } }, { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "targets": [
+        { "expr": "max(worker_cpu_saturation_ratio)", "legendFormat": "fleet CPU sat", "refId": "A" },
+        { "expr": "vector(0.8)", "legendFormat": "saturation threshold", "refId": "B" }
+      ]
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "k6 Virtual Users (from k6 runtime)",
+      "description": "Requires K6_PROMETHEUS_RW_SERVER_URL set — shows live VU count from k6 perspective",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(k6_vus)", "legendFormat": "active VUs", "refId": "A" },
+        { "expr": "sum(k6_vus_max)", "legendFormat": "max VUs", "refId": "B" }
+      ]
+    },
+    {
+      "id": 10, "type": "timeseries", "title": "k6 HTTP Request Rate (from k6 runtime)",
+      "description": "k6-perspective RPS — compare with SUT perspective for parity",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(k6_http_reqs_total[1m]))", "legendFormat": "k6 rps", "refId": "A" },
+        { "expr": "sum(rate(k6_http_req_failed_total[1m]))", "legendFormat": "k6 failed rps", "refId": "B" }
+      ]
+    }
+  ],
+  "templating": { "list": [] },
+  "links": [],
+  "weekStart": "",
+  "version": 2
+}
+
 		{
 			"datasource": {
 				"type": "prometheus",
