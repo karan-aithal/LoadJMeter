@@ -1,6 +1,6 @@
 'use strict';
 
-function parseK6Result(result) {
+function parseK6Result(result, { fleetSaturated = false } = {}) {
 	const output = `${result.stdout || ''}\n${result.stderr || ''}`;
 
 	if (result.signal === 'SIGTERM') {
@@ -16,6 +16,14 @@ function parseK6Result(result) {
 			verdict: 'PASS',
 			status: 'completed',
 			errorMessage: null,
+		};
+	}
+
+	if (fleetSaturated) {
+		return {
+			verdict: 'INCONCLUSIVE',
+			status: 'completed',
+			errorMessage: 'Fleet saturation detected (>80% CPU). Result inconclusive.',
 		};
 	}
 

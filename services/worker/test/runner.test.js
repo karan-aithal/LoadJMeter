@@ -27,4 +27,14 @@ describe('parseK6Result', () => {
 		expect(parsed.verdict).toBe('FAIL');
 		expect(parsed.errorMessage).toMatch(/thresholds/i);
 	});
+
+	it('returns INCONCLUSIVE when test fails under fleet saturation', () => {
+		const parsed = parseK6Result(
+			{ code: 1, signal: null, stdout: '', stderr: 'threshold failed' },
+			{ fleetSaturated: true }
+		);
+		expect(parsed.status).toBe('completed');
+		expect(parsed.verdict).toBe('INCONCLUSIVE');
+		expect(parsed.errorMessage).toMatch(/saturation/i);
+	});
 });

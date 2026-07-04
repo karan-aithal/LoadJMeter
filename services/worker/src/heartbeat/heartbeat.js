@@ -23,10 +23,12 @@ async function postHeartbeat(jobId, workerId) {
 	}
 }
 
-function startHeartbeat(jobId, workerId) {
+function startHeartbeat(jobId, workerId, { onFailure } = {}) {
 	const intervalMs = parseInt(process.env.HEARTBEAT_INTERVAL_MS || '5000', 10);
 	const timer = setInterval(() => {
-		postHeartbeat(jobId, workerId).catch(() => {});
+		postHeartbeat(jobId, workerId).catch(() => {
+			if (typeof onFailure === 'function') onFailure();
+		});
 	}, intervalMs);
 
 	return () => clearInterval(timer);

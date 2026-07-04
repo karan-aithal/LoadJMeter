@@ -7,6 +7,7 @@ const { parseK6Result } = require('./runner/result-parser');
 const { pushDeadLetter } = require('./queue/dead-letter');
 const { popJob, ackJob, requeueJob, quit } = require('./queue/redis-consumer');
 const { startHeartbeat } = require('./heartbeat/heartbeat');
+const { startMetricsServer } = require('./metrics/prometheus-exporter');
 const {
 	installSignalHandlers,
 	isShuttingDown,
@@ -17,6 +18,7 @@ const CONTROL_API_URL = process.env.CONTROL_API_URL || 'http://control-api:4000'
 const WORKER_API_KEY = process.env.WORKER_API_KEY || process.env.API_KEY;
 const WORKER_ID = process.env.WORKER_ID || `worker-${process.pid}`;
 const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3', 10);
+const metrics = startMetricsServer();
 
 async function updateRunStatus(jobId, payload) {
 	try {
@@ -35,7 +37,9 @@ function getNextAttempt(job) {
 }
 
 async function executeJob(job) {
+	const startedAtMs = Date.now();
 	const attempt = getNextAttempt(job);
+	metrics.setCurrentJob(true);
 
 	await updateRunStatus(job.id, {
 		status: 'running',
@@ -44,7 +48,9 @@ async function executeJob(job) {
 		errorMessage: null,
 	});
 
-	const stopHeartbeat = startHeartbeat(job.id, WORKER_ID);
+	const stopHeartbeat = startHeartbeat(job.id, WORKER_ID, {
+		onFailure: () => metrics.recordHeartbeatFailure(),
+	});
 	const run = runK6(job.config || {});
 	setRunCanceller(run.cancel);
 
@@ -52,15 +58,19 @@ async function executeJob(job) {
 	stopHeartbeat();
 	setRunCanceller(null);
 
-	const parsed = parseK6Result(result);
+	const parsed = parseK6Result(result, {
+		fleetSaturated: metrics.wasSaturatedSince(startedAtMs),
+	});
 	if (parsed.status === 'completed') {
 		await updateRunStatus(job.id, {
 			status: 'completed',
 			verdict: parsed.verdict,
 			completedAt: new Date().toISOString(),
-			errorMessage: null,
+			errorMessage: parsed.errorMessage,
 		});
 		await ackJob(job);
+		metrics.recordOutcome(parsed.verdict.toLowerCase());
+		metrics.setCurrentJob(false);
 		logger.info('job completed', { jobId: job.id, attempt });
 		return;
 	}
@@ -74,6 +84,8 @@ async function executeJob(job) {
 			errorMessage: parsed.errorMessage || 'max retries exceeded',
 		});
 		await ackJob(job);
+		metrics.recordOutcome('failed');
+		metrics.setCurrentJob(false);
 		logger.warn('job moved to dead-letter', { jobId: job.id, attempt });
 		return;
 	}
@@ -89,6 +101,8 @@ async function executeJob(job) {
 		verdict: null,
 		errorMessage: retryJob.lastError,
 	});
+	metrics.recordOutcome('retry');
+	metrics.setCurrentJob(false);
 	logger.warn('job requeued for retry', { jobId: job.id, attempt, maxRetries: MAX_RETRIES });
 }
 
@@ -98,6 +112,7 @@ async function runLoop() {
 
 	while (!isShuttingDown()) {
 		try {
+			metrics.incQueuePoll();
 			const job = await popJob({ timeoutSeconds: 2 });
 			if (!job) continue;
 
@@ -107,10 +122,12 @@ async function runLoop() {
 			});
 			await executeJob(job);
 		} catch (err) {
+			metrics.setCurrentJob(false);
 			logger.error('worker loop error', { error: err.message });
 		}
 	}
 
+	await metrics.close();
 	await quit();
 	logger.info('worker stopped');
 	process.exit(0);
