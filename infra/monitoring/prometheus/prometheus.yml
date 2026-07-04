@@ -17,3 +17,17 @@ scrape_configs:
           - sut:3000
     metrics_path: /metrics
     scrape_interval: 10s
+
+  - job_name: worker
+    static_configs:
+      - targets:
+          - worker:9464
+    metrics_path: /metrics
+    scrape_interval: 5s
+
+  - job_name: control-api
+    static_configs:
+      - targets:
+          - control-api:4000
+    metrics_path: /healthz
+    scrape_interval: 15s

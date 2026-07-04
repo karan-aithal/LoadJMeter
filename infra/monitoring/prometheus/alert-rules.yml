@@ -32,10 +32,19 @@ groups:
     interval: 30s
     rules:
       - alert: FleetCPUSaturation
-        expr: rate(process_cpu_seconds_total[1m]) > 0.8
+        expr: max(worker_cpu_saturation_ratio) > 0.8
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Fleet CPU saturation — test results may be INCONCLUSIVE"
           description: "Worker CPU usage {{ $value }} > 80%"
+
+      - alert: WorkerFleetDown
+        expr: sum(up{job="worker"}) < 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No active worker metrics target"
+          description: "Worker fleet appears down or unreachable for >1m"
