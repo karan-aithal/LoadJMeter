@@ -47,8 +47,16 @@ worker_cpu_saturation_ratio
 worker_saturation_breaches_total
 
 
+# To deploy to a local kind cluster:
 kind create cluster --name loadtest
 JWT_SECRET=$(openssl rand -hex 32) API_KEY=$(openssl rand -hex 16) make k8s-deploy
 make k8s-status
 make k8s-scale N=3
 kubectl -n loadtest-system logs -l app=worker -f
+
+
+# Chaos test flow:
+make k8s-deploy         # stack up
+make keda-apply         # ScaledObject active
+make load-queue N=5     # 5 jobs → workers scale 1→5
+make chaos-kill         # kill mid-run → job requeues → new worker picks up

@@ -102,3 +102,32 @@ k8s-logs:
 k8s-down:
 	helm uninstall $(HELM_RELEASE) --namespace $(NAMESPACE) || true
 	kubectl delete namespace $(NAMESPACE) --ignore-not-found
+
+# ── Phase 6: KEDA autoscaling + chaos tests ──────────────────────────────────
+.PHONY: keda-install keda-apply load-queue chaos-kill
+
+keda-install:
+	helm repo add kedacore https://kedacore.github.io/charts
+	helm repo update
+	helm upgrade --install keda kedacore/keda \
+	  --namespace keda --create-namespace \
+	  --version 2.14.0 \
+	  --wait --timeout 120s
+
+keda-apply:
+	kubectl apply -f infra/k8s/keda/trigger-auth-redis.yaml
+	kubectl apply -f infra/k8s/keda/scaledobject-worker.yaml
+	@echo "KEDA ScaledObject applied — queue length drives worker replicas"
+	@kubectl -n $(NAMESPACE) get scaledobject worker-scaledobject
+
+# Push N jobs → watch scale-up → wait → watch scale-down
+# Requires: API_KEY set, kubectl context pointing at $(NAMESPACE)
+load-queue:
+	NAMESPACE=$(NAMESPACE) bash infra/scripts/load-queue-test.sh $${N:-5} $${VUS:-10} $${DURATION:-30s}
+
+# Kill a worker mid-job, verify job requeues
+chaos-kill:
+	NAMESPACE=$(NAMESPACE) bash infra/scripts/chaos-kill-worker.sh
+
+seed-db:
+	NAMESPACE=$(NAMESPACE) bash infra/scripts/seed-db.sh
