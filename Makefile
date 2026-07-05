@@ -131,3 +131,12 @@ chaos-kill:
 
 seed-db:
 	NAMESPACE=$(NAMESPACE) bash infra/scripts/seed-db.sh
+
+# ── Phase 7: UI ───────────────────────────────────────────────────────────────
+.PHONY: ui-dev ui-build
+
+ui-dev:
+	cd services/ui && npm install && npm run dev
+
+ui-build:
+	cd services/ui && npm install && npm run build

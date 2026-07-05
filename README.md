@@ -60,3 +60,8 @@ make k8s-deploy         # stack up
 make keda-apply         # ScaledObject active
 make load-queue N=5     # 5 jobs → workers scale 1→5
 make chaos-kill         # kill mid-run → job requeues → new worker picks up
+
+To run locally:
+cp .env.example .env   # fill JWT_SECRET, API_KEY
+docker compose up --build -d
+# UI: http://localhost:5173

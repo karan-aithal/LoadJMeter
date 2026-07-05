@@ -149,5 +149,19 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # ── Phase 7: React UI ────────────────────────────────────────────────────────
+  ui:
+    build:
+      context: ./services/ui
+      dockerfile: Dockerfile
+    image: loadtest/ui:latest
+    container_name: ui
+    ports:
+      - "${UI_PORT:-5173}:80"
+    depends_on:
+      control-api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
