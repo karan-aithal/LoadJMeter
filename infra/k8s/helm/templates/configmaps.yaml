@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loadtest-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  SLOW_DELAY_MS: {{ .Values.sut.slowDelayMs | quote }}
+  FIB_N:         {{ .Values.sut.fibN | quote }}
+  MAX_VUS:          {{ .Values.controlApi.maxVus | quote }}
+  MAX_DURATION_S:   {{ .Values.controlApi.maxDurationS | quote }}
+  JWT_EXPIRES_IN:   {{ .Values.controlApi.jwtExpiresIn | quote }}
+  REDIS_URL:        {{ printf "redis://redis:%d" (int .Values.redis.port) | quote }}
+  POSTGRES_DB:      {{ .Values.postgres.database | quote }}
+  POSTGRES_USER:    {{ .Values.postgres.username | default "loadtest" | quote }}
+  WORKER_METRICS_PORT:   {{ .Values.worker.metricsPort | quote }}
+  HEARTBEAT_INTERVAL_MS: {{ .Values.worker.heartbeatIntervalMs | quote }}
+  MAX_RETRIES:           {{ .Values.worker.maxRetries | quote }}
+  CONTROL_API_URL: {{ printf "http://control-api:%d" (int .Values.controlApi.port) | quote }}
+  SUT_URL:         {{ printf "http://sut:%d" (int .Values.sut.port) | quote }}
+  K6_PROMETHEUS_RW_SERVER_URL: {{ printf "http://prometheus:%d/api/v1/write" (int .Values.prometheus.port) | quote }}
+  K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"

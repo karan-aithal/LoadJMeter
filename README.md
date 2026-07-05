@@ -45,3 +45,10 @@ worker_queue_poll_total
 worker_heartbeat_failures_total
 worker_cpu_saturation_ratio
 worker_saturation_breaches_total
+
+
+kind create cluster --name loadtest
+JWT_SECRET=$(openssl rand -hex 32) API_KEY=$(openssl rand -hex 16) make k8s-deploy
+make k8s-status
+make k8s-scale N=3
+kubectl -n loadtest-system logs -l app=worker -f

@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: control-api
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: {{ .Values.controlApi.replicas }}
+  selector:
+    matchLabels:
+      app: control-api
+  template:
+    metadata:
+      labels:
+        app: control-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: control-api
+          image: {{ .Values.controlApi.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.controlApi.port }}
+              name: http
+          env:
+            - name: PORT
+              value: {{ .Values.controlApi.port | quote }}
+          envFrom:
+            - configMapRef:
+                name: loadtest-config
+            - secretRef:
+                name: loadtest-secrets
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.controlApi.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: {{ .Values.controlApi.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: {{ .Values.controlApi.resources.requests.cpu }}
+              memory: {{ .Values.controlApi.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.controlApi.resources.limits.cpu }}
+              memory: {{ .Values.controlApi.resources.limits.memory }}

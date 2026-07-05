@@ -1,4 +1,5 @@
-.PHONY: up down build test run-worker run-fast run-slow run-cpu-heavy workers-up workers-scale workers-down
+.PHONY: up down build test run-worker run-fast run-slow run-cpu-heavy workers-up workers-scale workers-down \
+        k8s-build k8s-load k8s-deploy k8s-status k8s-scale k8s-logs k8s-down helm-lint
 
 # ── Infrastructure ──────────────────────────────────────────────────────────
 up:
@@ -54,3 +55,50 @@ workers-scale:
 
 workers-down:
 	docker compose stop worker
+
+# ── Phase 5: K8s / Helm ──────────────────────────────────────────────────────
+# Prerequisites: kind cluster running, kubectl context = kind-loadtest
+HELM_RELEASE ?= loadtest
+HELM_CHART   := infra/k8s/helm
+NAMESPACE    := loadtest-system
+IMAGES       := loadtest/sut:latest loadtest/control-api:latest loadtest/worker:latest
+
+k8s-build:
+	docker build -t loadtest/sut:latest           services/sut
+	docker build -t loadtest/control-api:latest   services/control-api
+	docker build -t loadtest/worker:latest        services/worker
+
+k8s-load: k8s-build
+	@for img in $(IMAGES); do \
+	  echo "Loading $$img into kind..."; \
+	  kind load docker-image $$img --name loadtest; \
+	done
+
+helm-lint:
+	helm lint $(HELM_CHART) -f $(HELM_CHART)/values.yaml \
+	  --set secrets.jwtSecret=test --set secrets.apiKey=test \
+	  --set secrets.postgresPassword=test
+
+k8s-deploy: k8s-load
+	kubectl apply -f infra/k8s/namespace.yaml
+	helm upgrade --install $(HELM_RELEASE) $(HELM_CHART) \
+	  --namespace $(NAMESPACE) \
+	  -f $(HELM_CHART)/values.yaml \
+	  -f $(HELM_CHART)/values-local.yaml \
+	  --set secrets.jwtSecret=$${JWT_SECRET} \
+	  --set secrets.apiKey=$${API_KEY} \
+	  --set secrets.postgresPassword=$${POSTGRES_PASSWORD:-changeme} \
+	  --wait --timeout 120s
+
+k8s-status:
+	kubectl -n $(NAMESPACE) get pods,svc,deployments
+
+k8s-scale:
+	kubectl -n $(NAMESPACE) scale deployment/worker --replicas=$${N:-3}
+
+k8s-logs:
+	kubectl -n $(NAMESPACE) logs -l app=$${SVC:-worker} -f --tail=50
+
+k8s-down:
+	helm uninstall $(HELM_RELEASE) --namespace $(NAMESPACE) || true
+	kubectl delete namespace $(NAMESPACE) --ignore-not-found

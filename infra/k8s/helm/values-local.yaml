@@ -1,0 +1,30 @@
+# Overrides for local minikube/kind — smaller resource footprint, never-pull images.
+global:
+  namespace: loadtest-system
+  imagePullPolicy: Never
+
+sut:
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 200m, memory: 128Mi }
+
+controlApi:
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 300m, memory: 256Mi }
+
+worker:
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 256Mi }
+
+postgres:
+  storageSize: 500Mi
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 200m, memory: 256Mi }
+
+redis:
+  resources:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits:   { cpu: 100m, memory: 64Mi }

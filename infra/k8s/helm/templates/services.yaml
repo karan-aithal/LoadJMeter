@@ -1,0 +1,109 @@
+# -- SUT ----------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: sut
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: sut
+spec:
+  selector:
+    app: sut
+  ports:
+    - port: {{ .Values.sut.port }}
+      targetPort: {{ .Values.sut.port }}
+      name: http
+---
+# -- Control API ---------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: control-api
+spec:
+  selector:
+    app: control-api
+  ports:
+    - port: {{ .Values.controlApi.port }}
+      targetPort: {{ .Values.controlApi.port }}
+      name: http
+---
+# -- Redis ---------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: redis
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: {{ .Values.redis.port }}
+      targetPort: {{ .Values.redis.port }}
+---
+# -- Postgres ------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: {{ .Values.postgres.port }}
+      targetPort: {{ .Values.postgres.port }}
+  clusterIP: None
+---
+# -- Prometheus ----------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: {{ .Values.prometheus.port }}
+      targetPort: {{ .Values.prometheus.port }}
+---
+# -- Grafana -------------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: grafana
+spec:
+  type: NodePort
+  selector:
+    app: grafana
+  ports:
+    - port: {{ .Values.grafana.port }}
+      targetPort: {{ .Values.grafana.port }}
+      nodePort: 30001
+---
+# -- Alertmanager --------------------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: alertmanager
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - port: {{ .Values.alertmanager.port }}
+      targetPort: {{ .Values.alertmanager.port }}

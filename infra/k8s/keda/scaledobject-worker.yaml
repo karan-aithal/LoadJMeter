@@ -1,0 +1,38 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-scaledobject
+  namespace: loadtest-system
+spec:
+  scaleTargetRef:
+    name: worker
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  # Wait 60s of idle queue before scaling down (avoids flapping between jobs)
+  cooldownPeriod: 60
+  pollingInterval: 5
+  advanced:
+    # Prevent scale-down from removing more than 1 pod per 30s window —
+    # gives in-flight jobs time to complete gracefully before next removal.
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 30
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 5
+              periodSeconds: 15
+  triggers:
+    - type: redis
+      authenticationRef:
+        name: redis-trigger-auth
+      metadata:
+        address: redis.loadtest-system.svc.cluster.local:6379
+        listName: jobs:pending
+        listLength: "1"   # 1 pending job → 1 worker replica

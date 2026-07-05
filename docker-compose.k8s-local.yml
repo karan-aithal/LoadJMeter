@@ -1,0 +1,26 @@
+# Helper compose file for building and loading images into kind before helm deploy.
+# Usage:
+#   kind create cluster --name loadtest
+#   make k8s-load          (builds + kind load docker-image)
+#   make k8s-deploy        (helm upgrade --install)
+#
+# This file is NOT used to run the stack — it only builds images.
+version: '3.9'
+services:
+  sut:
+    build:
+      context: ./services/sut
+      dockerfile: Dockerfile
+    image: loadtest/sut:latest
+
+  control-api:
+    build:
+      context: ./services/control-api
+      dockerfile: Dockerfile
+    image: loadtest/control-api:latest
+
+  worker:
+    build:
+      context: ./services/worker
+      dockerfile: Dockerfile
+    image: loadtest/worker:latest
