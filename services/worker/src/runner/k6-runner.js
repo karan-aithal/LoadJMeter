@@ -52,7 +52,7 @@ function runK6(config) {
 
 	return {
 		cancel: () => {
-			try { child.kill('SIGTERM'); } catch (_) {}
+			try { child.kill('SIGTERM'); } catch (_e) { /* ignore */ }
 		},
 		done: new Promise((doneResolve) => {
 			child.on('close', (code, signal) => {
