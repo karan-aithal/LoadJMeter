@@ -1,24 +1,27 @@
 {
-  "name": "control-api",
-  "version": "1.0.0",
-  "description": "Control plane API — manages test runs, auth, queue dispatch",
-  "main": "src/index.js",
-  "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
-    "test": "jest --runInBand --forceExit"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "pg": "^8.11.3",
-    "ioredis": "^5.3.2",
-    "jsonwebtoken": "^9.0.2",
-    "uuid": "^9.0.0",
-    "swagger-ui-express": "^5.0.0"
-  },
-  "devDependencies": {
-    "jest": "^29.7.0",
-    "supertest": "^6.3.4",
-    "nodemon": "^3.0.2"
-  }
+    "name":  "control-api",
+    "version":  "1.0.0",
+    "description":  "Control plane API — manages test runs, auth, queue dispatch",
+    "main":  "src/index.js",
+    "scripts":  {
+                    "start":  "node src/index.js",
+                    "dev":  "nodemon src/index.js",
+                    "test":  "jest --runInBand --forceExit",
+                    "lint":  "eslint src",
+                    "deps:install":  "node ../../infra/scripts/npm-install-with-fallback.js"
+                },
+    "dependencies":  {
+                         "express":  "^4.18.2",
+                         "pg":  "^8.11.3",
+                         "ioredis":  "^5.3.2",
+                         "jsonwebtoken":  "^9.0.2",
+                         "uuid":  "^9.0.0",
+                         "swagger-ui-express":  "^5.0.0"
+                     },
+    "devDependencies":  {
+                            "jest":  "^29.7.0",
+                            "supertest":  "^6.3.4",
+                            "nodemon":  "^3.0.2",
+                            "eslint":  "^8.57.0"
+                        }
 }
