@@ -52,7 +52,43 @@ sleep 5
 TOKEN=$(curl -sf -X POST http://localhost:4000/auth/token \
   -H 'Content-Type: application/json' \
   -d '{"apiKey":"'$API_KEY'"}' | jq -r .token)
-echo $TOKEN   # should be a long JWT string
+echo $TOKEN   
+# should be a long JWT string
+----------------------------------------------
+
+API_KEY=$(grep '^API_KEY=' .env | cut -d'=' -f2-)
+
+curl -s \
+  -X POST http://localhost:4000/auth/token \
+  -H "Content-Type: application/json" \
+  -d "{\"apiKey\":\"$API_KEY\"}" | jq .
+
+Also verify that the API key being sent matches what's in .env:
+
+grep '^API_KEY=' .env
+
+Finally, check the Control API logs for the request:
+
+docker compose logs control-api --tail=100
+
+docker compose exec control-api env | grep -E 'API_KEY|JWT_SECRET'
+
+docker compose down
+docker compose up --build -d
+
+docker compose up -d --force-recreate control-api
+
+API_KEY=$(grep '^API_KEY=' .env | cut -d'=' -f2-)
+
+TOKEN=$(curl -s \
+  -X POST http://localhost:4000/auth/token \
+  -H "Content-Type: application/json" \
+  -d "{\"apiKey\":\"$API_KEY\"}" \
+  | jq -r '.token')
+
+echo "$TOKEN"
+
+-----------------
 
 # POST test (with idempotency key)
 curl -sf -X POST http://localhost:4000/tests \
@@ -231,3 +267,35 @@ Grafana iframe panels load below the history table (requires Grafana running)
 cd services/ui
 npm run build
 # Expected: ✓ 42 modules transformed, exit 0
+
+
+
+------------------------------------------------------------------------
+JWT=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 40)
+KEY=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20)
+
+cat > .env <<EOF
+SUT_PORT=3000
+SLOW_DELAY_MS=200
+FIB_N=35
+
+PROMETHEUS_PORT=9090
+GRAFANA_PORT=3001
+GRAFANA_PASSWORD=admin
+
+CONTROL_API_PORT=4000
+JWT_SECRET=$JWT
+API_KEY=$KEY
+DATABASE_URL=postgresql://loadtest:changeme@postgres:5432/loadtest
+
+REDIS_URL=redis://redis:6379
+
+CONTROL_API_URL=http://control-api:4000
+HEARTBEAT_INTERVAL_MS=5000
+MAX_RETRIES=3
+DEAD_LETTER_QUEUE=dead-letter
+EOF
+
+echo "API_KEY=$KEY"
+echo "JWT_SECRET=$JWT"
+-----------------------------------------------------------------------
