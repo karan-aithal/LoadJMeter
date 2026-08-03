@@ -1,5 +1,6 @@
 'use strict';
 
+const os = require("node:os");
 const axios = require('axios');
 const logger = require('./logger');
 const { runK6 } = require('./runner/k6-runner');
@@ -16,7 +17,12 @@ const {
 
 const CONTROL_API_URL = process.env.CONTROL_API_URL || 'http://control-api:4000';
 const WORKER_API_KEY = process.env.WORKER_API_KEY || process.env.API_KEY;
-const WORKER_ID = process.env.WORKER_ID || `worker-${process.pid}`;
+//const WORKER_ID = process.env.WORKER_ID || `worker-${process.pid}`;
+const WORKER_ID =
+  process.env.WORKER_ID ||
+  process.env.HOSTNAME ||
+  os.hostname();
+
 const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3', 10);
 const metrics = startMetricsServer();
 
