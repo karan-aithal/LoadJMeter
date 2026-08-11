@@ -1,6 +1,10 @@
 // k6 threshold definitions — tied to SLOs in docs/slo.md
 // Import this into any k6 script that needs SLO enforcement.
 
+// Single source of truth for the SUT's default URL. Override per-run with
+// SUT_URL env var (docker-compose sets SUT_PORT via .env).
+export const SUT_URL = __ENV.SUT_URL || 'http://sut:3000';
+
 export const thresholds = {
   // Error rate < 1% across all requests — abort early if breaching
   http_req_failed: [

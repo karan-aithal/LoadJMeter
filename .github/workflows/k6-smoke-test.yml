@@ -12,6 +12,9 @@ on:
         description: Test duration (e.g. 30s, 2m)
         default: "30s"
 
+env:
+  SUT_PORT: 3000
+
 jobs:
   smoke:
     name: k6 Smoke (${{ github.event.inputs.vus || '5' }} VUs)
@@ -33,14 +36,14 @@ jobs:
         run: node src/index.js &
         working-directory: services/sut
         env:
-          PORT: 3000
+          PORT: ${{ env.SUT_PORT }}
           SLOW_DELAY_MS: "200"
           FIB_N: "30"
 
       - name: Wait for SUT /readyz
         run: |
           for i in $(seq 1 20); do
-            curl -sf http://localhost:3000/readyz && echo "SUT ready" && break
+            curl -sf http://localhost:${{ env.SUT_PORT }}/readyz && echo "SUT ready" && break
             sleep 1
           done
 
@@ -57,11 +60,11 @@ jobs:
       - name: Run k6 scenario (thresholds enforced)
         run: k6 run services/worker/scripts/k6/base-scenario.js
         env:
-          SUT_URL: http://localhost:3000
+          SUT_URL: http://localhost:${{ env.SUT_PORT }}
           VUS: ${{ github.event.inputs.vus || '5' }}
           DURATION: ${{ github.event.inputs.duration || '30s' }}
           RAMP_UP: 5s
           RAMP_DOWN: 5s
 
       - name: Verify SUT /metrics scraped (sanity check)
-        run: curl -sf http://localhost:3000/metrics | grep -q http_requests_total
+        run: curl -sf http://localhost:${{ env.SUT_PORT }}/metrics | grep -q http_requests_total

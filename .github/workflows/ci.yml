@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  SUT_PORT: 3000
+
 jobs:
   # ── Lint + Unit Tests ────────────────────────────────────────────────────────
   test:
@@ -96,14 +99,14 @@ jobs:
         run: node src/index.js &
         working-directory: services/sut
         env:
-          PORT: 3000
+          PORT: ${{ env.SUT_PORT }}
           SLOW_DELAY_MS: "200"
           FIB_N: "30"
 
       - name: Wait for SUT /readyz
         run: |
           for i in $(seq 1 15); do
-            curl -sf http://localhost:3000/readyz && echo "SUT ready" && break
+            curl -sf http://localhost:${{ env.SUT_PORT }}/readyz && echo "SUT ready" && break
             sleep 1
           done
 
@@ -121,7 +124,7 @@ jobs:
       - name: Run k6 smoke test
         run: k6 run services/worker/scripts/k6/base-scenario.js
         env:
-          SUT_URL: http://localhost:3000
+          SUT_URL: http://localhost:${{ env.SUT_PORT }}
           VUS: "5"
           DURATION: 20s
           RAMP_UP: 5s

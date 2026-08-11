@@ -12,7 +12,7 @@ const traceId = require('./middleware/trace-id');
 const logger = require('./logger/logger');
 
 const app = express();
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = parseInt(process.env.PORT || '3002', 10);
 
 app.use(express.json());
 app.use(traceId);
