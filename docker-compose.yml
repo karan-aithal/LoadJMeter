@@ -8,13 +8,13 @@ services:
     image: loadtest/sut:latest
     container_name: sut
     ports:
-      - "${SUT_PORT:-3000}:3000"
+      - "${SUT_PORT:-3000}:${SUT_PORT:-3000}"
     environment:
-      PORT: 3000
+      PORT: ${SUT_PORT:-3000}
       SLOW_DELAY_MS: ${SLOW_DELAY_MS:-200}
       FIB_N: ${FIB_N:-35}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:${SUT_PORT:-3000}/healthz"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -133,7 +133,7 @@ services:
       REDIS_URL: redis://redis:6379
       CONTROL_API_URL: http://control-api:4000
       WORKER_API_KEY: ${API_KEY}
-      SUT_URL: http://sut:3000
+      SUT_URL: http://sut:${SUT_PORT:-3000}
       HEARTBEAT_INTERVAL_MS: ${HEARTBEAT_INTERVAL_MS:-5000}
       MAX_RETRIES: ${MAX_RETRIES:-3}
       WORKER_METRICS_PORT: 9464

@@ -4,8 +4,8 @@
  */
 import http from 'k6/http';
 import { check, sleep } from 'k6';
+import { SUT_URL } from '../thresholds.js';
 
-const SUT_URL   = __ENV.SUT_URL   || 'http://sut:3000';
 const VUS       = parseInt(__ENV.VUS       || '50');
 const RAMP_UP   = __ENV.RAMP_UP   || '10s';
 const STEADY    = __ENV.DURATION  || '60s';
