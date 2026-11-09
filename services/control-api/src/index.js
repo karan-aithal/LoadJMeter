@@ -48,9 +48,11 @@ async function start() {
   const server = app.listen(PORT, () =>
     logger.info('Control API started', { port: PORT })
   );
+  const stopReaper = require('./queue/reaper').startReaper();
 
   process.on('SIGTERM', () => {
     logger.info('SIGTERM received, shutting down');
+    stopReaper();
     server.close(() => process.exit(0));
   });
 }

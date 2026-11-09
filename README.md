@@ -51,7 +51,7 @@ kubectl -n loadtest-system port-forward svc/grafana 3001:3000
 | 0 — SUT                      | ✅ | `services/sut` — 3 endpoints + /metrics + SLOs |
 | 1 — k6 worker manual run     | ✅ | `services/worker/scripts/k6` — thresholds + stages |
 | 2 — Control API              | ✅ | Auth + idempotent POST /tests + queue dispatch |
-| 3 — Queue-driven fleet       | ✅ | Atomic dequeue, retry, dead-letter, heartbeat |
+| 3 — Queue-driven fleet       | ✅ | Atomic dequeue, retry, dead-letter, heartbeat, reaper (requeues jobs from dead workers) |
 | 4 — Metrics + dashboards     | ✅ | Prometheus RED/USE + Grafana + INCONCLUSIVE verdict |
 | 5 — Kubernetes / Helm        | ✅ | Helm chart, NetworkPolicy, resource limits, PDB |
 | 6 — KEDA autoscaling         | ✅ | ScaledObject + chaos test scripts + runbooks |

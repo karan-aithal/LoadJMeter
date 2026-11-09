@@ -17,6 +17,11 @@ async function findById(id) {
   return rows[0] || null;
 }
 
+async function findByIds(ids) {
+  const { rows } = await pool.query('SELECT * FROM test_runs WHERE id = ANY($1::uuid[])', [ids]);
+  return rows;
+}
+
 async function findByIdempotencyKey(key) {
   const { rows } = await pool.query(
     'SELECT * FROM test_runs WHERE idempotency_key = $1', [key]
@@ -55,4 +60,4 @@ async function cancel(id) {
   return updateStatus(id, { status: 'cancelled' });
 }
 
-module.exports = { create, findById, findByIdempotencyKey, list, updateStatus, cancel };
+module.exports = { create, findById, findByIds, findByIdempotencyKey, list, updateStatus, cancel };

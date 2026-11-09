@@ -20,6 +20,7 @@ async function postHeartbeat(jobId, workerId) {
 		);
 	} catch (err) {
 		logger.warn('heartbeat failed', { jobId, error: err.message });
+		throw err; // let startHeartbeat's onFailure fire
 	}
 }
 
