@@ -140,3 +140,35 @@ ui-dev:
 
 ui-build:
 	cd services/ui && npm install && npm run build
+
+# ── OKD (CRC okd preset) + external TLS PostgreSQL ───────────────────────────
+# See infra/okd/README.md. The chaos script calls kubectl, so a kubectl->oc shim dir goes on PATH.
+.PHONY: okd-prereqs okd-tools okd-tls okd-secrets okd-build okd-deploy okd-smoke okd-chaos okd-down
+
+okd-prereqs:
+	bash infra/okd/scripts/cluster-prereqs.sh
+
+okd-tools:
+	bash infra/okd/scripts/install-tools.sh
+
+okd-tls:
+	bash infra/okd/postgres-tls/gen-certs.sh
+
+okd-secrets:
+	bash infra/okd/scripts/create-secrets.sh
+
+okd-build:
+	bash infra/okd/scripts/build-images.sh
+
+okd-deploy:
+	bash infra/okd/scripts/deploy.sh
+
+okd-smoke:
+	bash infra/okd/scripts/smoke.sh
+
+okd-chaos:
+	@mkdir -p .okd-shim && ln -sf "$$(command -v oc)" .okd-shim/kubectl
+	PATH="$(CURDIR)/.okd-shim:$$PATH" NAMESPACE=loadtest-system bash infra/scripts/chaos-kill-worker.sh
+
+okd-down:
+	oc delete project loadtest-system

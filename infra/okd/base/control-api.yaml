@@ -1,0 +1,61 @@
+# replicas: 1 on purpose. Migrations run on every boot with no advisory lock (src/db/migrate.js);
+# add pg_advisory_lock before scaling out. Postgres is external + TLS (verify-full, private CA).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-api
+  labels: { app: control-api }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: control-api }
+  template:
+    metadata:
+      labels: { app: control-api }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: control-api
+          image: image-registry.openshift-image-registry.svc:5000/loadtest-system/control-api:latest
+          imagePullPolicy: Always
+          ports:
+            - { containerPort: 4000, name: http }
+          env:
+            - { name: PORT, value: "4000" }
+          envFrom:
+            - configMapRef: { name: loadtest-config }
+            - secretRef: { name: control-api-secrets }   # DATABASE_URL, JWT_SECRET, API_KEY
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          # /readyz does SELECT 1: pod stays NotReady until the external DB + TLS work
+          readinessProbe:
+            httpGet: { path: /readyz, port: 4000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 4000 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: pg-ca, mountPath: /etc/pg-ca, readOnly: true }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+        - name: pg-ca
+          configMap: { name: pg-ca }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-api
+spec:
+  selector: { app: control-api }
+  ports:
+    - { name: http, port: 4000, targetPort: 4000 }

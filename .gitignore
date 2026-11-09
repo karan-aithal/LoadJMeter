@@ -66,3 +66,9 @@ results/
 *.tmp
 *.swp
 *.bak
+
+# OKD deployment: generated certs, local overrides, credentials
+infra/okd/postgres-tls/out/
+infra/okd/okd.env.local
+.okd-shim/
+loadjmeter.env.local

@@ -232,3 +232,20 @@ describe('POST /tests/:id/heartbeat', () => {
     }));
   });
 });
+
+// ── Health ────────────────────────────────────────────────────────────────────
+describe('GET /readyz', () => {
+  const pool = require('../src/db/client');
+
+  it('200 when database answers', async () => {
+    pool.query.mockResolvedValueOnce({ rows: [] });
+    const res = await request(app).get('/readyz');
+    expect(res.status).toBe(200);
+  });
+
+  it('503 when database is unreachable', async () => {
+    pool.query.mockRejectedValueOnce(new Error('connection refused'));
+    const res = await request(app).get('/readyz');
+    expect(res.status).toBe(503);
+  });
+});

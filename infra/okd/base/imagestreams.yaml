@@ -1,0 +1,27 @@
+# Images live in the OKD internal registry: image-registry.openshift-image-registry.svc:5000/loadtest-system/<name>
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata: { name: control-api }
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata: { name: worker }
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata: { name: sut }
+---
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata: { name: ui }
+---
+# Mirrored from docker.io once at deploy time (build-images.sh -> oc import-image).
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata: { name: redis }
+spec:
+  tags:
+    - name: 7.2-alpine
+      from: { kind: DockerImage, name: docker.io/library/redis:7.2-alpine }
+      importPolicy: { scheduled: false }
+      referencePolicy: { type: Local }

@@ -1,0 +1,6 @@
+# CRC (OKD preset) single-node. Defaults baked into base/ already match CRC
+# (PG host = 192.168.130.1). deploy.sh rewrites that IP if PG_HOST_IP differs.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
