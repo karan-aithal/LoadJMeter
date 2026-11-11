@@ -23,6 +23,14 @@ if redis.call('LREM', KEYS[1], 1, ARGV[1]) == 1 then
 end
 return 0`;
 
+// Ownership protocol (epoch = fencing token stored in test_runs.epoch):
+//   A worker that popped payload `attempt = a` runs as epoch a+1 and sends it on every write/heartbeat.
+//   1. claim  : DB UPDATE (running + silent + epoch < a+2) -> status 'pending', epoch a+2. The old owner (a+1) is
+//               now fenced out and a worker that finished first makes the claim fail, so nothing gets queued.
+//   2. move   : Lua LREM + LPUSH of the retry payload (attempt a+1, whose owner will run as a+2) or DLQ.
+// A reaper crash between 1 and 2 leaves the old payload in jobs:processing with row.epoch >= a+2: that is
+// recognisable as "already claimed" and the next pass completes the move without a second claim. (Retries
+// exhausted: the claim marks the run 'failed', so that state is a failed row whose payload is still in processing.)
 async function reapOnce({ redis = producer.getClient(), runs = repo, now = Date.now() } = {}) {
   const raws = await redis.lrange(PROCESSING, 0, -1);
   const jobs = [];
@@ -39,31 +47,40 @@ async function reapOnce({ redis = producer.getClient(), runs = repo, now = Date.
     const row = byId.get(job.id);
     if (!row) continue;
 
-    if (TERMINAL.includes(row.status)) { // worker died before ack, or run cancelled
+    const prev       = Number.isInteger(job.attempt) ? job.attempt : 0;
+    const fenceEpoch = prev + 2;
+    const attempt    = prev + 1;
+    const dead       = attempt >= MAX_RETRIES;
+    const silentMs   = now - new Date(row.updated_at).getTime();
+    const alreadyClaimed = (row.epoch || 0) >= fenceEpoch; // an earlier claim whose Redis move never happened
+
+    // Terminal: worker died before ack, or run cancelled. Never re-queue it. The one exception is a reaper claim
+    // that marked the run failed (dead) but died before pushing the payload to the dead-letter queue.
+    if (TERMINAL.includes(row.status) && !(row.status === 'failed' && dead && alreadyClaimed)) {
       await redis.eval(MOVE, 2, PROCESSING, PENDING, raw, '');
       continue;
     }
-    // Only 'running': a just-popped job has old updated_at until the worker PATCHes running.
-    const silentMs = now - new Date(row.updated_at).getTime();
-    if (row.status !== 'running' || silentMs < STALE_MS) continue;
 
-    const attempt = (Number.isInteger(job.attempt) ? job.attempt : 0) + 1;
-    const dead    = attempt >= MAX_RETRIES;
+    if (!alreadyClaimed) {
+      // Only 'running': a just-popped job has old updated_at until the worker PATCHes running.
+      if (row.status !== 'running' || silentMs < STALE_MS) continue;
+      const claimed = await runs.claimStale(job.id, {
+        newEpoch: fenceEpoch,
+        cutoff: new Date(now - STALE_MS).toISOString(),
+        errorMessage: 'worker lost (no heartbeat)',
+        dead,
+        completedAt: new Date(now).toISOString(),
+      });
+      if (!claimed) continue; // finished, cancelled or heartbeated since we read it: the worker still owns it
+    }
+
     const retry   = { ...job, attempt, lastError: 'worker lost (no heartbeat)' };
     if (dead) Object.assign(retry, { deadLetterReason: retry.lastError, deadLetteredAt: new Date(now).toISOString() });
 
     const moved = await redis.eval(MOVE, 2, PROCESSING, dead ? DEAD : PENDING, raw, JSON.stringify(retry));
-    if (moved !== 1) continue; // another reaper or the worker got it first
+    if (moved !== 1) continue; // another reaper got it first
 
-    // The job is already back in Redis, so a replacement worker may have PATCHed 'running' before this write.
-    // ifSilentBefore makes the write a no-op in that case instead of regressing the row to 'pending'.
-    const written = await runs.updateStatus(job.id, {
-      status: dead ? 'failed' : 'pending',
-      errorMessage: retry.lastError,
-      ifSilentBefore: new Date(now - STALE_MS).toISOString(),
-      ...(dead && { verdict: 'FAIL', completedAt: new Date(now).toISOString() }),
-    });
-    logger.warn('job_reaped', { jobId: job.id, attempt, silentMs, deadLettered: dead, statusWritten: !!written });
+    logger.warn('job_reaped', { jobId: job.id, attempt, silentMs, deadLettered: dead, resumedClaim: alreadyClaimed });
     reaped++;
   }
   return reaped;

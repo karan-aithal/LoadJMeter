@@ -41,10 +41,19 @@ async function ackJob(job) {
 	await redis.lrem(PROCESSING_QUEUE, 1, JSON.stringify(job));
 }
 
+// Re-queue only if we still hold the entry. If the reaper already moved it (we were fenced out), LREM is 0
+// and nothing is pushed, so a stale worker can't create a second copy. Returns true if re-queued.
+const REQUEUE = `
+if redis.call('LREM', KEYS[1], 1, ARGV[1]) == 1 then
+  redis.call('LPUSH', KEYS[2], ARGV[2])
+  return 1
+end
+return 0`;
+
 async function requeueJob(originalJob, retryJob) {
 	const redis = getClient();
-	await redis.lrem(PROCESSING_QUEUE, 1, JSON.stringify(originalJob));
-	await redis.lpush(PENDING_QUEUE, JSON.stringify(retryJob));
+	const moved = await redis.eval(REQUEUE, 2, PROCESSING_QUEUE, PENDING_QUEUE, JSON.stringify(originalJob), JSON.stringify(retryJob));
+	return moved === 1;
 }
 
 async function quit() {
