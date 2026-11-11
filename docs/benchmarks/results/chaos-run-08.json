@@ -1,0 +1,46 @@
+{
+  "result": "PASS",
+  "fail_reason": "",
+  "job_id": "a9f70049-0743-4fdb-af1e-110d9307a065",
+  "killed_worker": "worker-85584ddf46-b7swh",
+  "retry_worker": "worker-85584ddf46-dk5pj",
+  "final_status": "completed",
+  "verdict": "PASS",
+  "mttr_seconds": 21.6,
+  "requeue_seen_seconds": null,
+  "completion_seconds": 90,
+  "retry_attempt_seen_by_worker": 1,
+  "successful_completions": 1,
+  "executions_started_on_surviving_pods": 1,
+  "reaper_events": 1,
+  "in_dead_letter": false,
+  "left_in_redis": false,
+  "duplicate_completions": 0,
+  "job": {
+    "duration": "45s",
+    "vus": 2
+  },
+  "env": {
+    "git_sha": "9ce23f2d4425826fbf82fe3bea7296184d0f2616",
+    "uncommitted_files": 6,
+    "worker_image": "image-registry.openshift-image-registry.svc:5000/loadtest-system/worker@sha256:5b2cb5668c332be812abb5fad1a12a77109e4b6f8a4a05cc376c1fed7e85c455",
+    "control_api_image": "image-registry.openshift-image-registry.svc:5000/loadtest-system/control-api@sha256:9f6583d581f44ea82784fcd9efce3315ae6717166603063f3fc4acb34e786cda",
+    "worker_resources": {
+      "limits": {
+        "cpu": "1",
+        "memory": "512Mi"
+      },
+      "requests": {
+        "cpu": "250m",
+        "memory": "256Mi"
+      }
+    },
+    "worker_replicas": 1,
+    "reaper_env": {
+      "HEARTBEAT_INTERVAL_MS": "5000",
+      "REAPER_STALE_MS": "20000",
+      "REAPER_INTERVAL_MS": "5000",
+      "MAX_RETRIES": "3"
+    }
+  }
+}

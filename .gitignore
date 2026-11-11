@@ -60,6 +60,7 @@ pgdata/
 
 # k6 results
 results/
+!docs/benchmarks/results/
 *.json.gz
 
 # Temporary files
