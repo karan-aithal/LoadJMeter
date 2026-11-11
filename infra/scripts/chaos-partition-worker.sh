@@ -35,6 +35,9 @@ reachable() {   # can pod $1 reach control-api? prints OK or ERR
 }
 
 echo "==> Partition $PART from control-api"
+# T_PART = just before the isolation is applied. Heartbeats may stop any time after this, so MTTR from here is the
+# conservative figure (confirming the block below can take seconds and must not move the origin).
+T_PART=$(date +%s.%N)
 k apply -f - >/dev/null <<YAML
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -53,14 +56,12 @@ YAML
 # 'app' leaves the pod so worker-egress (which allows control-api) stops selecting it and the ReplicaSet
 # no longer owns it (a replacement starts); 'chaos' makes it match the restrictive policy above.
 k label pod "$PART" chaos=partition app- --overwrite >/dev/null
-T_PART=$(date +%s.%N)
 for _ in $(seq 40); do [[ $(reachable "$PART") == ERR ]] && break; sleep 0.5; done
 [[ $(reachable "$PART") == ERR ]] || die "partition did not take effect (pod still reaches control-api)"
-T_PART=$(date +%s.%N)
 echo "  partition confirmed"
 
 echo "==> Poll retry on a different worker"
-T_RETRY="" T_HEAL="" T_DONE="" RETRY_WORKER="" REASON="" FINAL=""
+T_RETRY="" T_HEAL="" T_DONE="" T_FENCED="" RETRY_WORKER="" REASON="" FINAL=""
 while :; do
   now=$(date +%s.%N)
   if J=$(api GET "/tests/$ID" 2>/dev/null); then
@@ -70,6 +71,10 @@ while :; do
     fi
     if [[ -n $T_RETRY && -z $T_HEAL && $(gt "$(el "$now" "$T_RETRY")" "$HEAL_AFTER") == 1 ]]; then
       k delete networkpolicy "$POLICY" >/dev/null; T_HEAL=$(date +%s.%N); echo "  healed (+$(el "$T_HEAL" "$T_PART")s)"
+    fi
+    # after the heal the stale worker's next heartbeat must be fenced: timestamp it while it happens
+    if [[ -n $T_HEAL && -z $T_FENCED ]] && k logs "$PART" --tail=-1 2>/dev/null | grep -q -E 'heartbeat fenced|status update fenced|ownership lost'; then
+      T_FENCED=$(date +%s.%N); echo "  stale worker fenced (+$(el "$T_FENCED" "$T_HEAL")s after heal)"
     fi
     case $st in completed|failed|cancelled) T_DONE=$now; FINAL=$J; break;; esac
   fi
@@ -82,8 +87,8 @@ done
 
 # The stale worker must notice it was fenced (heartbeat 409) and stop. Give it time to heartbeat after the heal.
 echo "==> Wait for the stale worker to be fenced"
-T_FENCED=""
 for _ in $(seq $((FENCE_TIMEOUT * 2))); do
+  [[ -n $T_FENCED ]] && break
   if k logs "$PART" --tail=-1 2>/dev/null | grep -q -E 'heartbeat fenced|status update fenced|ownership lost'; then T_FENCED=$(date +%s.%N); break; fi
   sleep 0.5
 done
@@ -112,13 +117,13 @@ n() { [[ -n $1 ]] && el "$1" "$T_PART" || echo null; }
 
 jq -n --arg id "$ID" --arg part "$PART" --arg retryw "$RETRY_WORKER" --arg finalw "$FINAL_WORKER" --arg fs "$FINAL_STATUS" \
   --arg v "$VERDICT" --arg reason "$REASON" --argjson pass "$PASS" --argjson env "$ENV_JSON" \
-  --argjson retry "$(n "$T_RETRY")" --argjson heal "$(n "$T_HEAL")" --argjson fenced "$(n "$T_FENCED")" --argjson done "$(n "$T_DONE")" \
+  --argjson retry "$(n "$T_RETRY")" --argjson heal "$(n "$T_HEAL")" --argjson fenced "$(if [[ -n $T_FENCED ]]; then el "$T_FENCED" "$T_HEAL"; else echo null; fi)" --argjson done "$(n "$T_DONE")" \
   --argjson comp "$COMPLETIONS" --argjson stalec "$STALE_COMPLETIONS" --argjson lost "$STALE_OWNERSHIP_LOST" \
   --argjson reaped "$REAPED" --argjson fw "$FENCED_WRITES" --argjson dlq "$IN_DLQ" --argjson stuck "$STUCK" \
   --arg dur "$DURATION" --argjson vus "$VUS" --argjson ha "$HEAL_AFTER" \
   '{result:(if $pass then "PASS" else "FAIL" end), fail_reason:$reason, job_id:$id, partitioned_worker:$part,
     retry_worker:$retryw, final_worker:$finalw, final_status:$fs, verdict:$v,
-    mttr_seconds:$retry, heal_seconds:$heal, stale_worker_fenced_seconds:$fenced, completion_seconds:$done,
+    mttr_seconds:$retry, heal_seconds:$heal, stale_worker_fenced_after_heal_seconds:$fenced, completion_seconds:$done,
     successful_completions:$comp, stale_worker_completions:$stalec, stale_worker_fence_events:$lost,
     control_api_fenced_writes:$fw, reaper_events:$reaped, in_dead_letter:($dlq>0), left_in_redis:($stuck>0),
     duplicate_completions:(if $comp>1 then $comp-1 else 0 end),
