@@ -46,6 +46,8 @@ async function executeJob(job) {
 	const startedAtMs = Date.now();
 	const attempt = getNextAttempt(job);
 	metrics.setCurrentJob(true);
+	// first attempt only: retries/reaped jobs keep the original createdAt, so their "wait" would include earlier runs
+	if (attempt === 1) metrics.observeQueueWait((startedAtMs - Date.parse(job.createdAt)) / 1000);
 
 	await updateRunStatus(job.id, {
 		status: 'running',
@@ -76,6 +78,7 @@ async function executeJob(job) {
 		});
 		await ackJob(job);
 		metrics.recordOutcome(parsed.verdict.toLowerCase());
+		metrics.observeJob({ outcome: parsed.verdict.toLowerCase(), durationSec: (Date.now() - startedAtMs) / 1000 });
 		metrics.setCurrentJob(false);
 		logger.info('job completed', { jobId: job.id, attempt });
 		return;
@@ -91,6 +94,7 @@ async function executeJob(job) {
 		});
 		await ackJob(job);
 		metrics.recordOutcome('failed');
+		metrics.observeJob({ outcome: 'failed', durationSec: (Date.now() - startedAtMs) / 1000 });
 		metrics.setCurrentJob(false);
 		logger.warn('job moved to dead-letter', { jobId: job.id, attempt });
 		return;
@@ -108,6 +112,7 @@ async function executeJob(job) {
 		errorMessage: retryJob.lastError,
 	});
 	metrics.recordOutcome('retry');
+	metrics.observeJob({ outcome: 'retry', durationSec: (Date.now() - startedAtMs) / 1000 });
 	metrics.setCurrentJob(false);
 	logger.warn('job requeued for retry', { jobId: job.id, attempt, maxRetries: MAX_RETRIES });
 }
