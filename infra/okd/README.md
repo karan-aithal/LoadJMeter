@@ -36,7 +36,7 @@ The DB password is read from `PG_PASSWORD` or the untracked `loadjmeter.env.loca
 - `base/` plain manifests (restricted-v2 compatible: no fixed UID, non-root, caps dropped, read-only root where possible).
 - `overlays/crc/` entry point for `oc kustomize`. `okd.env` has defaults, `okd.env.local` overrides.
 - Secrets/CA ConfigMap are created by `scripts/create-secrets.sh`, not by kustomize.
-- Not included: Prometheus/Grafana/Alertmanager and KEDA (use OKD user-workload monitoring / Custom Metrics Autoscaler later).
+- Not included: Prometheus/Grafana/Alertmanager and KEDA by default (use OKD user-workload monitoring / Custom Metrics Autoscaler later). KEDA is an optional add-on, see below.
 - `control-api` is pinned to 1 replica: migrations run on boot without an advisory lock.
 
 ## Verify
@@ -51,3 +51,17 @@ PGSSLMODE=disable psql -h 192.168.130.1 -U loadjmeter loadjmeter   # rejected by
 ## Rollback
 `make okd-down` deletes the project. Restore host Postgres: copy back `pg_hba.conf.bak-<ts>`, delete
 `conf.d/50-loadjmeter-tls.conf`, `pg_ctlcluster 14 main restart`.
+
+## Optional: KEDA worker autoscaling (separate lifecycle)
+Deploy paths differ: `make k8s-deploy` uses the Helm chart (kind); `make okd-deploy` uses these Kustomize manifests. They share the app, not the deployment.
+KEDA is **not** installed or removed by `okd-deploy`; it has its own targets:
+```bash
+make okd-keda-install   # helm: KEDA 2.14.0 into ns keda, values: infra/okd/keda-values.yaml (SCC-friendly, no fixed UIDs)
+make okd-keda-apply     # allow-keda-to-redis NetworkPolicy + TriggerAuthentication + ScaledObject (worker 1..10)
+make load-queue N=6     # timed scale-up test (N must exceed the target of 5)
+make okd-keda-down      # delete the above and uninstall KEDA
+```
+- Once the ScaledObject exists, KEDA owns `worker` replicas (1..10); the `replicas: 2` in `base/worker.yaml` no longer applies. After `okd-keda-down` the Deployment keeps its last replica count; scale it by hand.
+- The namespace denies ingress by default, so `keda-networkpolicy.yaml` lets the `keda` namespace reach Redis on 6379.
+- The metric is `LLEN jobs:pending` (target 1 per replica). Jobs already popped by a worker do not count.
+- CPU: worker requests 250m (limit 1). On a 3.8-CPU CRC node only ~3 workers fit, so extra pods go `Pending: Insufficient cpu`. Measured numbers are in `docs/slo.md`.

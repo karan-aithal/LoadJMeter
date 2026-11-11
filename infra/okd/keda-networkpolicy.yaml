@@ -1,0 +1,16 @@
+# OKD only: the namespace denies ingress by default; let the KEDA operator (ns keda) poll Redis.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-keda-to-redis
+  namespace: loadtest-system
+spec:
+  podSelector:
+    matchLabels: { app: redis }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: keda }
+      ports:
+        - { protocol: TCP, port: 6379 }

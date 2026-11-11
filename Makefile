@@ -104,7 +104,7 @@ k8s-down:
 	kubectl delete namespace $(NAMESPACE) --ignore-not-found
 
 # ── Phase 6: KEDA autoscaling + chaos tests ──────────────────────────────────
-.PHONY: keda-install keda-apply load-queue chaos-kill
+.PHONY: keda-install keda-apply load-queue bench-backlog chaos-kill
 
 keda-install:
 	helm repo add kedacore https://kedacore.github.io/charts
@@ -123,7 +123,11 @@ keda-apply:
 # Push N jobs → watch scale-up → wait → watch scale-down
 # Requires: API_KEY set, kubectl context pointing at $(NAMESPACE)
 load-queue:
-	NAMESPACE=$(NAMESPACE) bash infra/scripts/load-queue-test.sh $${N:-5} $${VUS:-10} $${DURATION:-30s}
+	NAMESPACE=$(NAMESPACE) bash infra/scripts/load-queue-test.sh $${N:-6} $${VUS:-10} $${DURATION:-30s}
+
+# Sustained backlog: N jobs at once, sample fleet CPU/throughput until drained
+bench-backlog:
+	NAMESPACE=$(NAMESPACE) bash infra/scripts/load-backlog-bench.sh $${N:-30} $${VUS:-10} $${DURATION:-30s}
 
 # Kill a worker mid-job, verify job requeues
 chaos-kill:
@@ -143,7 +147,8 @@ ui-build:
 
 # ── OKD (CRC okd preset) + external TLS PostgreSQL ───────────────────────────
 # See infra/okd/README.md. The chaos script calls kubectl, so a kubectl->oc shim dir goes on PATH.
-.PHONY: okd-prereqs okd-tools okd-tls okd-secrets okd-build okd-deploy okd-smoke okd-chaos okd-down
+.PHONY: okd-prereqs okd-tools okd-tls okd-secrets okd-build okd-deploy okd-smoke okd-chaos okd-down \
+        okd-keda-install okd-keda-apply okd-keda-down
 
 okd-prereqs:
 	bash infra/okd/scripts/cluster-prereqs.sh
@@ -172,3 +177,17 @@ okd-chaos:
 
 okd-down:
 	oc delete project loadtest-system
+
+# Optional KEDA add-on for OKD (not part of okd-deploy; see infra/okd/README.md). `keda-install` is the kind/Helm path.
+okd-keda-install:
+	helm repo add kedacore https://kedacore.github.io/charts
+	helm repo update
+	helm upgrade --install keda kedacore/keda --namespace keda --create-namespace \
+	  --version 2.14.0 -f infra/okd/keda-values.yaml --wait --timeout 180s
+
+okd-keda-apply:
+	kubectl apply -f infra/okd/keda-networkpolicy.yaml -f infra/k8s/keda/trigger-auth-redis.yaml -f infra/k8s/keda/scaledobject-worker.yaml
+
+okd-keda-down:
+	kubectl delete -f infra/k8s/keda/scaledobject-worker.yaml -f infra/k8s/keda/trigger-auth-redis.yaml -f infra/okd/keda-networkpolicy.yaml --ignore-not-found
+	helm uninstall keda --namespace keda

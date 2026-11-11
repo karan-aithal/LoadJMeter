@@ -1,0 +1,9 @@
+# Helm values for KEDA on OKD/OpenShift: drop fixed UIDs/GIDs so the restricted-v2 SCC can assign them.
+securityContext:
+  operator:     { runAsUser: null }
+  metricServer: { runAsUser: null }
+  webhooks:     { runAsUser: null }
+podSecurityContext:
+  operator:     { runAsUser: null, runAsGroup: null, fsGroup: null }
+  metricServer: { runAsUser: null, runAsGroup: null, fsGroup: null }
+  webhooks:     { runAsUser: null, runAsGroup: null, fsGroup: null }

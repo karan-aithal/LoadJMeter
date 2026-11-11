@@ -81,9 +81,10 @@ make up              # docker compose up --build -d
 make down            # docker compose down
 make test            # npm test for sut + worker
 make k8s-deploy      # helm upgrade --install (requires kind cluster)
-make keda-install    # install KEDA into cluster
+make keda-install    # install KEDA into cluster (kind/Helm path)
 make keda-apply      # apply ScaledObject
-make load-queue N=5  # push 5 jobs → watch scale-up
+make okd-keda-install okd-keda-apply   # same for OKD (see infra/okd/README.md)
+make load-queue N=6  # push 6 jobs → time scale-up to 5 workers
 make chaos-kill      # kill worker mid-job → verify requeue
 ```
 
