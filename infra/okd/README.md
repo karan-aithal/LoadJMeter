@@ -10,7 +10,7 @@ pod control-api --TLS--> Service postgres-external -> Endpoints 192.168.130.1:54
 ## One-time prerequisites (manual)
 1. BIOS: enable VT-x / AMD-V. `make okd-prereqs` must pass (needs >= 16 GB free RAM, 35 GB disk, /dev/kvm, `libvirt` group).
 2. `make okd-tools` (oc/kubectl/crc into `~/bin`), then:
-   `crc config set preset okd && crc config set memory 16384 && crc setup && crc start`, then `oc login -u kubeadmin https://api.crc.testing:6443`.
+   `crc config set preset okd && crc config set network-mode system && crc config set memory 16384 && crc setup && crc start`, then `oc login -u kubeadmin https://api.crc.testing:6443`.
 3. Check the host bridge IP: `ip addr show crc`. If it is not `192.168.130.1`, create `infra/okd/okd.env.local` with `PG_HOST_IP` and `PG_CIDR`.
 
 ## Order of operations

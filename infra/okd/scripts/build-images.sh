@@ -7,7 +7,9 @@ HERE=$(cd "$(dirname "$0")" && pwd); ROOT=$(cd "$HERE/../../.." && pwd)
 OC=${OC:-oc}; SERVICES=("$@"); (( ${#SERVICES[@]} )) || SERVICES=(sut control-api worker ui)
 
 $OC -n "$NAMESPACE" apply -f "$HERE/../base/imagestreams.yaml" -f "$HERE/../base/buildconfigs.yaml"
-$OC -n "$NAMESPACE" import-image redis:7.2-alpine --from=docker.io/library/redis:7.2-alpine --confirm >/dev/null
+# imagestreams.yaml makes the API import redis itself; wait for the tag instead of racing it with `oc import-image`
+for _ in $(seq 60); do $OC -n "$NAMESPACE" get istag redis:7.2-alpine >/dev/null 2>&1 && break; sleep 2; done
+$OC -n "$NAMESPACE" get istag redis:7.2-alpine >/dev/null || { echo "redis:7.2-alpine import did not finish (check docker.io access)" >&2; exit 1; }
 for s in "${SERVICES[@]}"; do
   echo "==> build $s"
   $OC -n "$NAMESPACE" start-build "$s" --from-dir="$ROOT/services/$s" --follow --wait
