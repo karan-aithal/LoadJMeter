@@ -25,6 +25,13 @@ describe('reapOnce', () => {
     expect(runs.updateStatus).toHaveBeenCalledWith('a', expect.objectContaining({ status: 'pending' }));
   });
 
+  it('guards the pending write so a newer worker update is not overwritten', async () => {
+    const { redis, runs } = setup({ id: 'a' }, row('a', 'running', 60000));
+    await reapOnce({ redis, runs, now: NOW });
+    const { ifSilentBefore } = runs.updateStatus.mock.calls[0][1];
+    expect(Date.parse(ifSilentBefore)).toBe(NOW - 20000);
+  });
+
   it('leaves job with fresh heartbeat alone', async () => {
     const { redis, runs } = setup({ id: 'a' }, row('a', 'running', 5000));
     expect(await reapOnce({ redis, runs, now: NOW })).toBe(0);

@@ -55,12 +55,15 @@ async function reapOnce({ redis = producer.getClient(), runs = repo, now = Date.
     const moved = await redis.eval(MOVE, 2, PROCESSING, dead ? DEAD : PENDING, raw, JSON.stringify(retry));
     if (moved !== 1) continue; // another reaper or the worker got it first
 
-    await runs.updateStatus(job.id, {
+    // The job is already back in Redis, so a replacement worker may have PATCHed 'running' before this write.
+    // ifSilentBefore makes the write a no-op in that case instead of regressing the row to 'pending'.
+    const written = await runs.updateStatus(job.id, {
       status: dead ? 'failed' : 'pending',
       errorMessage: retry.lastError,
+      ifSilentBefore: new Date(now - STALE_MS).toISOString(),
       ...(dead && { verdict: 'FAIL', completedAt: new Date(now).toISOString() }),
     });
-    logger.warn('job_reaped', { jobId: job.id, attempt, silentMs, deadLettered: dead });
+    logger.warn('job_reaped', { jobId: job.id, attempt, silentMs, deadLettered: dead, statusWritten: !!written });
     reaped++;
   }
   return reaped;

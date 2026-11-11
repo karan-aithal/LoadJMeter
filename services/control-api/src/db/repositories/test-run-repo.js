@@ -39,7 +39,8 @@ async function list({ page = 1, limit = 20 }) {
   return { items: rows, total: parseInt(countRows[0].count, 10), page, limit };
 }
 
-async function updateStatus(id, { status, verdict, workerId, errorMessage, startedAt, completedAt }) {
+// ifSilentBefore (ISO): apply only if updated_at is older, so a stale writer can't clobber a newer worker update.
+async function updateStatus(id, { status, verdict, workerId, errorMessage, startedAt, completedAt, ifSilentBefore }) {
   const { rows } = await pool.query(
     `UPDATE test_runs
      SET status        = COALESCE($2,  status),
@@ -49,9 +50,9 @@ async function updateStatus(id, { status, verdict, workerId, errorMessage, start
          started_at    = COALESCE($6,  started_at),
          completed_at  = COALESCE($7,  completed_at),
          updated_at    = NOW()
-     WHERE id = $1
+     WHERE id = $1 AND ($8::timestamptz IS NULL OR updated_at < $8::timestamptz)
      RETURNING *`,
-    [id, status, verdict, workerId, errorMessage, startedAt, completedAt]
+    [id, status, verdict, workerId, errorMessage, startedAt, completedAt, ifSilentBefore || null]
   );
   return rows[0] || null;
 }

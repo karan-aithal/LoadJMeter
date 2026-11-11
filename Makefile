@@ -147,7 +147,7 @@ ui-build:
 
 # ── OKD (CRC okd preset) + external TLS PostgreSQL ───────────────────────────
 # See infra/okd/README.md. The chaos script calls kubectl, so a kubectl->oc shim dir goes on PATH.
-.PHONY: okd-prereqs okd-tools okd-tls okd-secrets okd-build okd-deploy okd-smoke okd-chaos okd-down \
+.PHONY: okd-prereqs okd-tools okd-tls okd-secrets okd-build okd-deploy okd-smoke okd-chaos okd-chaos-bench okd-down \
         okd-keda-install okd-keda-apply okd-keda-down
 
 okd-prereqs:
@@ -174,6 +174,14 @@ okd-smoke:
 okd-chaos:
 	@mkdir -p .okd-shim && ln -sf "$$(command -v oc)" .okd-shim/kubectl
 	PATH="$(CURDIR)/.okd-shim:$$PATH" NAMESPACE=loadtest-system bash infra/scripts/chaos-kill-worker.sh
+
+# 10 fault-injection runs + median/p95 (results in docs/benchmarks/results/)
+okd-chaos-bench:
+	@mkdir -p .okd-shim && ln -sf "$$(command -v oc)" .okd-shim/kubectl
+	@for i in $$(seq -w 1 $${RUNS:-10}); do \
+	  PATH="$(CURDIR)/.okd-shim:$$PATH" NAMESPACE=loadtest-system OUT=docs/benchmarks/results/chaos-run-$$i.json bash infra/scripts/chaos-kill-worker.sh >/dev/null || echo "run $$i did not PASS"; \
+	done
+	bash infra/scripts/chaos-summary.sh docs/benchmarks/results/chaos-run-*.json
 
 okd-down:
 	oc delete project loadtest-system
