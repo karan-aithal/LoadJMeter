@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels: { app: worker }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: worker }
+  template:
+    metadata:
+      labels: { app: worker }
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: worker
+          image: image-registry.openshift-image-registry.svc:5000/loadtest-system/worker:latest
+          imagePullPolicy: Always
+          ports:
+            - { containerPort: 9464, name: metrics }
+          envFrom:
+            - configMapRef: { name: loadtest-config }
+          env:
+            - { name: HOME, value: /tmp }   # arbitrary UID has no home dir; k6 wants a writable one
+            - name: WORKER_ID
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: WORKER_API_KEY            # worker never sees DATABASE_URL
+              valueFrom: { secretKeyRef: { name: worker-secrets, key: WORKER_API_KEY } }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          readinessProbe:
+            httpGet: { path: /readyz, port: 9464 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 9464 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }

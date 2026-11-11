@@ -12,7 +12,15 @@ app.use(express.json());
 
 // Health (no auth)
 app.get('/healthz', (_req, res) => res.json({ status: 'alive' }));
-app.get('/readyz',  (_req, res) => res.json({ status: 'ready' }));
+app.get('/readyz', async (_req, res) => {
+  try {
+    await require('./db/client').query('SELECT 1');
+    res.json({ status: 'ready' });
+  } catch (err) {
+    logger.warn('readyz: database unreachable', { error: err.message });
+    res.status(503).json({ status: 'not ready' });
+  }
+});
 
 // API routes
 app.use('/auth',  require('./routes/auth'));

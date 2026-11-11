@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ui
+  labels: { app: ui }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ui }
+  template:
+    metadata:
+      labels: { app: ui }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: ui
+          image: image-registry.openshift-image-registry.svc:5000/loadtest-system/ui:latest
+          imagePullPolicy: Always
+          ports:
+            - { containerPort: 8080, name: http }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          readinessProbe:
+            httpGet: { path: /index.html, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /index.html, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }   # nginx-unprivileged: pid + caches under /tmp
+      volumes:
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui
+spec:
+  selector: { app: ui }
+  ports:
+    - { name: http, port: 8080, targetPort: 8080 }

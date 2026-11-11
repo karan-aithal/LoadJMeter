@@ -157,7 +157,7 @@ services:
     image: loadtest/ui:latest
     container_name: ui
     ports:
-      - "${UI_PORT:-5173}:80"
+      - "${UI_PORT:-5173}:8080"
     depends_on:
       control-api:
         condition: service_healthy

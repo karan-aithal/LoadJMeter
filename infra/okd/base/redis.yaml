@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels: { app: redis }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app: redis }
+  template:
+    metadata:
+      labels: { app: redis }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: redis
+          image: image-registry.openshift-image-registry.svc:5000/loadtest-system/redis:7.2-alpine
+          # queue only; the job list is rebuilt from pending/processing, no persistence in v1
+          args: ["redis-server", "--save", "", "--appendonly", "no", "--dir", "/data"]
+          ports:
+            - { containerPort: 6379, name: redis }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 256Mi }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - { name: data, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector: { app: redis }
+  ports:
+    - { name: redis, port: 6379, targetPort: 6379 }
