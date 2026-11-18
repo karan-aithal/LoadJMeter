@@ -26,7 +26,9 @@ PART=$OWNER
 
 cleanup() {
   k delete networkpolicy "$POLICY" --ignore-not-found >/dev/null 2>&1 || true
-  k delete pod "$PART" --grace-period=0 --force --ignore-not-found >/dev/null 2>&1 || true   # orphan: would pop jobs
+  # Orphan (no longer owned by the ReplicaSet): it would keep popping jobs. Graceful delete + wait so its worker loop
+  # has really exited before the next run; a --force delete returns while the container can still pop a job.
+  k delete pod "$PART" --ignore-not-found --wait=true --timeout=90s >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
