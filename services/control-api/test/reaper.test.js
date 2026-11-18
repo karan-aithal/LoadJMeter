@@ -47,10 +47,33 @@ describe('reapOnce', () => {
     expect(runs.claimStale).not.toHaveBeenCalled();
   });
 
-  it('leaves just-popped (pending row) job alone', async () => {
+  it('leaves just-popped (pending row) job alone, however old its queue time', async () => {
     const { redis, runs } = setup({ id: 'a' }, row('a', 'pending', 600000));
-    expect(await reapOnce({ redis, runs, now: NOW })).toBe(0);
+    expect(await reapOnce({ redis, runs, now: NOW, seen: new Map() })).toBe(0);
     expect(runs.claimStale).not.toHaveBeenCalled();
+  });
+
+  // Regression: worker popped the job, then died before PATCHing 'running'. The row stays 'pending' with its old
+  // queue-time updated_at, so the heartbeat can't tell; the job sat in jobs:processing forever.
+  it('recovers a job stranded in processing with a pending row after the stale window', async () => {
+    const { raw, redis, runs } = setup({ id: 'a' }, row('a', 'pending', 600000));
+    const seen = new Map([[raw, NOW - 21000]]);
+    expect(await reapOnce({ redis, runs, now: NOW, seen })).toBe(1);
+    expect(runs.claimStale).toHaveBeenCalledWith('a', expect.objectContaining({ newEpoch: 2, dead: false }));
+    expect(redis.eval.mock.calls[0][3]).toBe('jobs:pending');
+  });
+
+  it('does not recover a pending row that was popped less than the stale window ago', async () => {
+    const { raw, redis, runs } = setup({ id: 'a' }, row('a', 'pending', 600000));
+    const seen = new Map([[raw, NOW - 5000]]);
+    expect(await reapOnce({ redis, runs, now: NOW, seen })).toBe(0);
+  });
+
+  it('forgets payloads that left processing', async () => {
+    const { redis, runs } = setup({ id: 'a' }, row('a', 'running', 5000));
+    const seen = new Map([['gone', NOW - 99999]]);
+    await reapOnce({ redis, runs, now: NOW, seen });
+    expect(seen.has('gone')).toBe(false);
   });
 
   it('dead-letters when attempts exhausted, claiming the run as failed', async () => {

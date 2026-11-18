@@ -77,6 +77,11 @@ d('test-run-repo fencing (postgres)', () => {
     expect(await repo.claimStale(fresh, { newEpoch: 2, cutoff: OLD, errorMessage: 'x' })).toBeNull(); // heartbeated
   });
 
+  it('claimStale recovers a pending row (popped, worker died before reporting running)', async () => {
+    const id = uuid(8); await seed(id, 'pending', 0);
+    expect(await repo.claimStale(id, { newEpoch: 2, cutoff: OLD, errorMessage: 'lost' })).toMatchObject({ status: 'pending', epoch: 2 });
+  });
+
   it('claimStale with dead marks the run failed atomically', async () => {
     const id = uuid(7); await seed(id, 'running', 3);
     const row = await repo.claimStale(id, { newEpoch: 4, cutoff: new Date().toISOString(), errorMessage: 'lost',

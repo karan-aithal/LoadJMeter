@@ -25,14 +25,20 @@ return 0`;
 
 // Ownership protocol (epoch = fencing token stored in test_runs.epoch):
 //   A worker that popped payload `attempt = a` runs as epoch a+1 and sends it on every write/heartbeat.
-//   1. claim  : DB UPDATE (running + silent + epoch < a+2) -> status 'pending', epoch a+2. The old owner (a+1) is
+//   1. claim  : DB UPDATE (running + silent, or pending + stranded in processing; epoch < a+2) -> status 'pending', epoch a+2. The old owner (a+1) is
 //               now fenced out and a worker that finished first makes the claim fail, so nothing gets queued.
 //   2. move   : Lua LREM + LPUSH of the retry payload (attempt a+1, whose owner will run as a+2) or DLQ.
 // A reaper crash between 1 and 2 leaves the old payload in jobs:processing with row.epoch >= a+2: that is
 // recognisable as "already claimed" and the next pass completes the move without a second claim. (Retries
 // exhausted: the claim marks the run 'failed', so that state is a failed row whose payload is still in processing.)
-async function reapOnce({ redis = producer.getClient(), runs = repo, now = Date.now() } = {}) {
+// raw payload -> first time this reaper saw it in jobs:processing. Used only for rows still 'pending': a worker that
+// popped a job and died before PATCHing 'running' leaves no DB heartbeat, so the time in processing is the signal.
+const firstSeen = new Map();
+
+async function reapOnce({ redis = producer.getClient(), runs = repo, now = Date.now(), seen = firstSeen } = {}) {
   const raws = await redis.lrange(PROCESSING, 0, -1);
+  for (const r of seen.keys()) if (!raws.includes(r)) seen.delete(r);
+  for (const r of raws) if (!seen.has(r)) seen.set(r, now);
   const jobs = [];
   for (const raw of raws) {
     try { jobs.push({ raw, job: JSON.parse(raw) }); } catch { /* worker drops bad JSON itself */ }
@@ -62,8 +68,11 @@ async function reapOnce({ redis = producer.getClient(), runs = repo, now = Date.
     }
 
     if (!alreadyClaimed) {
-      // Only 'running': a just-popped job has old updated_at until the worker PATCHes running.
-      if (row.status !== 'running' || silentMs < STALE_MS) continue;
+      // 'running': judged by the heartbeat. 'pending': a just-popped job has an old updated_at (its queue time) until
+      // the worker PATCHes running, so judge it by how long it has sat in processing instead.
+      const stale = row.status === 'running' ? silentMs >= STALE_MS
+                  : row.status === 'pending' && now - seen.get(raw) >= STALE_MS;
+      if (!stale) continue;
       const claimed = await runs.claimStale(job.id, {
         newEpoch: fenceEpoch,
         cutoff: new Date(now - STALE_MS).toISOString(),

@@ -66,6 +66,8 @@ async function updateStatus(id, { status, verdict, workerId, errorMessage, start
 
 // Reaper step 1: take ownership in the DB BEFORE touching Redis. Succeeds only if the run is still 'running'
 // and silent since cutoff, so a worker that finished or heartbeated in the meantime wins and nothing is queued.
+// A 'pending' row is claimable too: it means the worker popped the job and never reported 'running' (the caller
+// has seen the payload sit in jobs:processing for the stale window; a legit queued job is not in processing).
 // On success the previous owner (epoch < newEpoch) is fenced out. `dead` marks the run failed in the same
 // statement (retries exhausted), otherwise it goes back to 'pending'.
 async function claimStale(id, { newEpoch, cutoff, errorMessage, dead = false, completedAt = null }) {
@@ -73,7 +75,8 @@ async function claimStale(id, { newEpoch, cutoff, errorMessage, dead = false, co
     `UPDATE test_runs
      SET status = $5, verdict = COALESCE($6, verdict), completed_at = COALESCE($7::timestamptz, completed_at),
          epoch = $2, error_message = $3, updated_at = NOW()
-     WHERE id = $1 AND status = 'running' AND epoch < $2 AND updated_at < $4::timestamptz
+     WHERE id = $1 AND epoch < $2
+       AND ((status = 'running' AND updated_at < $4::timestamptz) OR status = 'pending')
      RETURNING *`,
     [id, newEpoch, errorMessage, cutoff, dead ? 'failed' : 'pending', dead ? 'FAIL' : null, completedAt]
   );
