@@ -32,7 +32,7 @@ chaos_preflight() {
 
 chaos_env_json() {
   jq -n \
-    --arg sha "$(git -C "$ROOT" rev-parse HEAD)" --arg dirty "$(git -C "$ROOT" status --porcelain | wc -l)" \
+    --arg sha "$(git -C "$ROOT" rev-parse HEAD)" --arg dirty "$(git -C "$ROOT" status --porcelain -- . ':!docs/benchmarks/results' | wc -l)" \
     --arg wimg "$(k get pods -l app=worker -o jsonpath='{.items[0].status.containerStatuses[0].imageID}')" \
     --arg cimg "$(k get pods -l app=control-api -o jsonpath='{.items[0].status.containerStatuses[0].imageID}')" \
     --argjson wres "$(k get deploy worker -o json | jq -c '.spec.template.spec.containers[0].resources')" \
