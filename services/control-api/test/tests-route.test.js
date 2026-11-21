@@ -14,6 +14,7 @@ const jwt      = require('jsonwebtoken');
 const { app }  = require('../src/index');
 const repo     = require('../src/db/repositories/test-run-repo');
 const producer = require('../src/queue/redis-producer');
+const metrics  = require('../src/metrics');
 
 const TOKEN = jwt.sign(
   { sub: 'api-user', role: 'operator' },
@@ -235,6 +236,17 @@ describe('stale-worker fencing', () => {
     const res = await request(app).post('/tests/u/heartbeat').set('x-api-key', INTERNAL_API_KEY)
       .send({ workerId: 'w', epoch: 1 });
     expect(res.status).toBe(409);
+  });
+
+  it('GET /metrics (no auth) exposes the reaper and fenced counters; a fenced write increments the latter', async () => {
+    repo.findById.mockResolvedValue({ id: 'u', status: 'pending', epoch: 2 });
+    repo.updateStatus.mockResolvedValue(null);
+    const before = metrics.snapshot().fenced_writes_total;
+    await request(app).patch('/tests/u/status').set('x-api-key', INTERNAL_API_KEY).send({ status: 'completed', epoch: 1 });
+    const res = await request(app).get('/metrics');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('control_api_reaped_total');
+    expect(res.text).toContain(`control_api_fenced_writes_total ${before + 1}`);
   });
 
   it('DELETE sets the cancel tombstone before the DB write', async () => {

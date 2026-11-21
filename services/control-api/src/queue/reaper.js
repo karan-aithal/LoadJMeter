@@ -5,6 +5,7 @@
 const producer = require('./redis-producer');
 const repo     = require('../db/repositories/test-run-repo');
 const logger   = require('../logger');
+const metrics  = require('../metrics');
 
 const PENDING    = process.env.JOBS_PENDING_QUEUE    || 'jobs:pending';
 const PROCESSING = process.env.JOBS_PROCESSING_QUEUE || 'jobs:processing';
@@ -93,6 +94,7 @@ async function reapOnce({ redis = producer.getClient(), runs = repo, now = Date.
     const moved = await redis.eval(MOVE, 2, PROCESSING, dead ? DEAD : PENDING, raw, JSON.stringify(retry), `${producer.CANCELLED_PREFIX}${job.id}`);
     if (moved !== 1) continue; // another reaper got it first
 
+    metrics.inc('reaped_total');
     logger.warn('job_reaped', { jobId: job.id, attempt, silentMs, deadLettered: dead, resumedClaim: alreadyClaimed });
     reaped++;
   }

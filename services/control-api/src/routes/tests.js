@@ -8,12 +8,14 @@ const auth       = require('../middleware/auth');
 const idempotency = require('../middleware/idempotency');
 const validate   = require('../middleware/validate');
 const logger     = require('../logger');
+const metrics    = require('../metrics');
 
 const intOrNull = (v) => (Number.isInteger(v) ? v : null);
 
 // The row exists (checked by the caller) but the write was refused: the run is terminal (finished/cancelled) or
 // the writer's epoch is older than the current owner's. Either way the worker must stop acting on this job.
 function fenced(req, res, run, epoch) {
+  metrics.inc('fenced_writes_total');
   logger.warn('fenced_write', { jobId: req.params.id, epoch, rowEpoch: run.epoch, rowStatus: run.status, path: req.path });
   return res.status(409).json({ error: 'fenced', status: run.status, epoch: run.epoch });
 }

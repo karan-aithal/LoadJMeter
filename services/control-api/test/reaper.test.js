@@ -4,6 +4,7 @@ jest.mock('../src/db/repositories/test-run-repo');
 jest.mock('../src/queue/redis-producer', () => ({ getClient: jest.fn(), CANCELLED_PREFIX: 'jobs:cancelled:' }));
 
 const { reapOnce } = require('../src/queue/reaper');
+const metrics = require('../src/metrics');
 
 const NOW = Date.parse('2026-01-01T00:01:00Z');
 const row = (id, status, ageMs, epoch = 1) => ({ id, status, epoch, updated_at: new Date(NOW - ageMs).toISOString() });
@@ -39,6 +40,13 @@ describe('reapOnce', () => {
     const { redis, runs } = setup({ id: 'a' }, row('a', 'running', 60000));
     await reapOnce({ redis, runs, now: NOW });
     expect(Date.parse(runs.claimStale.mock.calls[0][1].cutoff)).toBe(NOW - 20000);
+  });
+
+  it('counts reaped jobs in the reaped_total metric', async () => {
+    const { redis, runs } = setup({ id: 'a' }, row('a', 'running', 60000));
+    const before = metrics.snapshot().reaped_total;
+    await reapOnce({ redis, runs, now: NOW });
+    expect(metrics.snapshot().reaped_total).toBe(before + 1);
   });
 
   it('leaves job with fresh heartbeat alone', async () => {
