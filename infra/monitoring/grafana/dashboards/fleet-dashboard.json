@@ -22,7 +22,7 @@
     {
       "id": 1, "type": "stat", "title": "Active Workers",
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "colorMode": "background", "graphMode": "none" },
       "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": 0 }, { "color": "green", "value": 1 }] } }, "overrides": [] },
       "targets": [{ "expr": "sum(worker_current_job)", "legendFormat": "active", "refId": "A" }]
@@ -30,7 +30,7 @@
     {
       "id": 2, "type": "stat", "title": "Fleet CPU Saturation",
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "colorMode": "background", "graphMode": "none" },
       "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 0.8 }] } }, "overrides": [] },
       "targets": [{ "expr": "max(worker_cpu_saturation_ratio)", "legendFormat": "cpu sat", "refId": "A" }]
@@ -38,7 +38,7 @@
     {
       "id": 3, "type": "stat", "title": "Jobs Completed",
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "colorMode": "value", "graphMode": "none" },
       "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
       "targets": [{ "expr": "sum(worker_jobs_total{outcome=\"pass\"})", "legendFormat": "PASS", "refId": "A" }, { "expr": "sum(worker_jobs_total{outcome=\"fail\"})", "legendFormat": "FAIL", "refId": "B" }, { "expr": "sum(worker_jobs_total{outcome=\"inconclusive\"})", "legendFormat": "INCONCLUSIVE", "refId": "C" }]
@@ -46,7 +46,7 @@
     {
       "id": 4, "type": "stat", "title": "Heartbeat Failures (5m)",
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "colorMode": "background", "graphMode": "none" },
       "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } }, "overrides": [] },
       "targets": [{ "expr": "increase(worker_heartbeat_failures_total[5m])", "legendFormat": "failures", "refId": "A" }]
@@ -55,7 +55,7 @@
       "id": 5, "type": "timeseries", "title": "Utilisation — Active Workers Over Time",
       "description": "USE: Utilisation = fraction of workers busy",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
       "targets": [
@@ -67,7 +67,7 @@
       "id": 6, "type": "timeseries", "title": "Saturation — CPU Ratio Per Worker",
       "description": "USE: Saturation = CPU saturation ratio (>0.8 triggers INCONCLUSIVE verdict)",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "fieldConfig": {
         "defaults": { "unit": "percentunit", "max": 1, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 0.8 }] } },
@@ -82,7 +82,7 @@
       "id": 7, "type": "timeseries", "title": "Errors — Heartbeat Failures + Job Retries",
       "description": "USE: Errors = stall indicators",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
       "targets": [
@@ -94,7 +94,7 @@
     {
       "id": 8, "type": "timeseries", "title": "Queue Poll Rate",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
       "targets": [
@@ -106,177 +106,4 @@
   "links": [],
   "weekStart": "",
   "version": 2
-}
-
-		{
-			"datasource": {
-				"type": "prometheus",
-				"uid": "${DS_PROMETHEUS}"
-			},
-			"fieldConfig": {
-				"defaults": {
-					"unit": "short"
-				},
-				"overrides": []
-			},
-			"gridPos": {
-				"h": 8,
-				"w": 12,
-				"x": 0,
-				"y": 0
-			},
-			"id": 1,
-			"options": {
-				"legend": {
-					"calcs": [],
-					"displayMode": "list",
-					"placement": "bottom"
-				},
-				"tooltip": {
-					"mode": "single"
-				}
-			},
-			"targets": [
-				{
-					"expr": "sum(worker_jobs_total)",
-					"legendFormat": "jobs total",
-					"refId": "A"
-				}
-			],
-			"title": "Worker Jobs Processed",
-			"type": "timeseries"
-		},
-		{
-			"datasource": {
-				"type": "prometheus",
-				"uid": "${DS_PROMETHEUS}"
-			},
-			"fieldConfig": {
-				"defaults": {
-					"max": 1,
-					"min": 0,
-					"unit": "percentunit"
-				},
-				"overrides": []
-			},
-			"gridPos": {
-				"h": 8,
-				"w": 12,
-				"x": 12,
-				"y": 0
-			},
-			"id": 2,
-			"options": {
-				"legend": {
-					"displayMode": "list",
-					"placement": "bottom"
-				},
-				"tooltip": {
-					"mode": "single"
-				}
-			},
-			"targets": [
-				{
-					"expr": "max(worker_cpu_saturation_ratio)",
-					"legendFormat": "fleet saturation",
-					"refId": "A"
-				}
-			],
-			"title": "Fleet CPU Saturation",
-			"type": "timeseries"
-		},
-		{
-			"datasource": {
-				"type": "prometheus",
-				"uid": "${DS_PROMETHEUS}"
-			},
-			"fieldConfig": {
-				"defaults": {
-					"unit": "short"
-				},
-				"overrides": []
-			},
-			"gridPos": {
-				"h": 8,
-				"w": 12,
-				"x": 0,
-				"y": 8
-			},
-			"id": 3,
-			"options": {
-				"legend": {
-					"displayMode": "list",
-					"placement": "bottom"
-				},
-				"tooltip": {
-					"mode": "single"
-				}
-			},
-			"targets": [
-				{
-					"expr": "sum(worker_current_job)",
-					"legendFormat": "active workers",
-					"refId": "A"
-				}
-			],
-			"title": "Active Worker Jobs",
-			"type": "timeseries"
-		},
-		{
-			"datasource": {
-				"type": "prometheus",
-				"uid": "${DS_PROMETHEUS}"
-			},
-			"fieldConfig": {
-				"defaults": {
-					"unit": "short"
-				},
-				"overrides": []
-			},
-			"gridPos": {
-				"h": 8,
-				"w": 12,
-				"x": 12,
-				"y": 8
-			},
-			"id": 4,
-			"options": {
-				"legend": {
-					"displayMode": "list",
-					"placement": "bottom"
-				},
-				"tooltip": {
-					"mode": "single"
-				}
-			},
-			"targets": [
-				{
-					"expr": "increase(worker_heartbeat_failures_total[5m])",
-					"legendFormat": "heartbeat failures (5m)",
-					"refId": "A"
-				}
-			],
-			"title": "Heartbeat Failures",
-			"type": "timeseries"
-		}
-	],
-	"refresh": "10s",
-	"schemaVersion": 39,
-	"style": "dark",
-	"tags": [
-		"loadtest",
-		"fleet"
-	],
-	"templating": {
-		"list": []
-	},
-	"time": {
-		"from": "now-30m",
-		"to": "now"
-	},
-	"timezone": "",
-	"title": "LoadTest Fleet",
-	"uid": "loadtest-fleet",
-	"version": 1,
-	"weekStart": ""
 }
