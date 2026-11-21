@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../App.jsx';
+import { useAuth } from '../auth.js';
 import { api } from '../api/client.js';
 import VerdictBadge from '../components/VerdictBadge.jsx';
 import LiveStatus from '../components/LiveStatus.jsx';

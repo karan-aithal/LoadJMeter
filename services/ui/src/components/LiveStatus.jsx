@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useAuth } from '../App.jsx';
+import { useAuth } from '../auth.js';
 import { api } from '../api/client.js';
 import VerdictBadge from './VerdictBadge.jsx';
 
