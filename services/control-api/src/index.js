@@ -25,6 +25,7 @@ app.get('/readyz', async (_req, res) => {
 // API routes
 app.use('/auth',  require('./routes/auth'));
 app.use('/tests', require('./routes/tests'));
+app.use('/ops',   require('./routes/ops'));
 
 // Prometheus scrape target (no auth, like /healthz)
 app.get('/metrics', (_req, res) => res.type('text/plain; version=0.0.4').send(require('./metrics').render()));

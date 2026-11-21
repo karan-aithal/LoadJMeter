@@ -6,6 +6,9 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
+# Vite inlines VITE_* at build time, so the Grafana URL must be a build arg
+ARG VITE_GRAFANA_URL=http://localhost:3001
+ENV VITE_GRAFANA_URL=$VITE_GRAFANA_URL
 RUN npm run build
 
 # ---- serve (nginx static) ----

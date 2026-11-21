@@ -27,7 +27,15 @@ export const api = {
   listTests:    (page = 1, token) => request('GET', `/tests?page=${page}&limit=20`, undefined, token),
   getTest:      (id, token)      => request('GET', `/tests/${id}`, undefined, token),
   cancelTest:   (id, token)      => request('DELETE', `/tests/${id}`, undefined, token),
+  retryTest:    (id, token)      => request('POST', `/tests/${id}/retry`, undefined, token),
+  opsQueues:    (token)          => request('GET', '/ops/queues', undefined, token),
+  opsChaos:     (token)          => request('GET', '/ops/chaos', undefined, token),
+  requeueDlq:   (id, token)      => request('POST', `/ops/dlq/${id}/requeue`, undefined, token),
+  purgeDlq:     (id, token)      => request('DELETE', `/ops/dlq/${id}`, undefined, token),
 };
+
+// SSE feed URL. EventSource can't set headers, so the JWT rides in the query string (see control-api routes/ops.js).
+export const opsStreamUrl = (token) => `${BASE}/ops/stream?token=${encodeURIComponent(token)}`;
 
 // createTest needs the Idempotency-Key header — override fetch call
 api.createTest = async (config, idempotencyKey, token) => {

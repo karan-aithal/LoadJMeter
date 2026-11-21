@@ -15,7 +15,7 @@ function fmt(iso) {
   return new Date(iso).toLocaleString();
 }
 
-export default function TestHistoryTable({ runs, onCancel }) {
+export default function TestHistoryTable({ runs, onCancel, onRetry }) {
   if (!runs?.length) {
     return <p style={{ color: '#64748b', marginTop: 16, fontSize: 14 }}>No test runs yet.</p>;
   }
@@ -47,6 +47,14 @@ export default function TestHistoryTable({ runs, onCancel }) {
                   style={{ color: '#7c83fd', textDecoration: 'none', fontSize: 13 }}>
                   View
                 </Link>
+                {['failed', 'cancelled'].includes(run.status) && onRetry && (
+                  <button onClick={() => onRetry(run.id)}
+                    style={{ marginLeft: 12, background: 'none', border: '1px solid #3b4160',
+                             color: '#7c83fd', padding: '3px 10px', borderRadius: 4,
+                             cursor: 'pointer', fontSize: 12 }}>
+                    Retry
+                  </button>
+                )}
                 {['pending', 'running'].includes(run.status) && (
                   <button onClick={() => onCancel?.(run.id)}
                     style={{ marginLeft: 12, background: 'none', border: '1px solid #991b1b',

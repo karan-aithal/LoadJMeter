@@ -44,6 +44,17 @@ export default function Dashboard() {
     }
   }
 
+  async function handleRetry(id) {
+    try {
+      const run = await api.retryTest(id, token);
+      setLiveRunId(run.id);
+      fetchRuns(1);
+      setPage(1);
+    } catch (ex) {
+      alert(ex.message);
+    }
+  }
+
   const totalPages = Math.ceil(total / 20);
 
   return (
@@ -65,7 +76,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <TestHistoryTable runs={runs} onCancel={handleCancel} />
+      <TestHistoryTable runs={runs} onCancel={handleCancel} onRetry={handleRetry} />
 
       {totalPages > 1 && (
         <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'center' }}>

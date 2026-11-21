@@ -22,6 +22,14 @@ async function findByIds(ids) {
   return rows;
 }
 
+// Everything still in flight (queued or running): drives the live worker/pipeline view.
+async function listActive(limit = 100) {
+  const { rows } = await pool.query(
+    "SELECT * FROM test_runs WHERE status IN ('pending', 'running') ORDER BY created_at LIMIT $1", [limit]
+  );
+  return rows;
+}
+
 async function findByIdempotencyKey(key) {
   const { rows } = await pool.query(
     'SELECT * FROM test_runs WHERE idempotency_key = $1', [key]
@@ -87,4 +95,4 @@ async function cancel(id) {
   return updateStatus(id, { status: 'cancelled' });
 }
 
-module.exports = { create, findById, findByIds, findByIdempotencyKey, list, updateStatus, claimStale, cancel };
+module.exports = { create, findById, findByIds, findByIdempotencyKey, list, listActive, updateStatus, claimStale, cancel };

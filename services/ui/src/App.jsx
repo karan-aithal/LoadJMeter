@@ -3,6 +3,9 @@ import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
 import { AuthContext } from './auth.js';
 import Dashboard from './pages/Dashboard.jsx';
 import TestDetail from './pages/TestDetail.jsx';
+import Pipeline from './pages/Pipeline.jsx';
+import Queues from './pages/Queues.jsx';
+import Chaos from './pages/Chaos.jsx';
 
 
 const s = {
@@ -80,6 +83,9 @@ export default function App() {
         <nav style={s.nav}>
           <Link to="/" style={s.brand}>⚡ LoadTest</Link>
           <Link to="/" style={s.navLink}>Dashboard</Link>
+          <Link to="/pipeline" style={s.navLink}>Pipeline</Link>
+          <Link to="/queues" style={s.navLink}>Queues</Link>
+          <Link to="/chaos" style={s.navLink}>Chaos</Link>
           <button onClick={handleLogout}
             style={{ marginLeft: 'auto', background: 'none', border: '1px solid #2d3148',
                      color: '#94a3b8', padding: '6px 14px', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>
@@ -90,6 +96,9 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/tests/:id" element={<TestDetail />} />
+            <Route path="/pipeline" element={<Pipeline />} />
+            <Route path="/queues" element={<Queues />} />
+            <Route path="/chaos" element={<Chaos />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

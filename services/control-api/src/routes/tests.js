@@ -9,6 +9,8 @@ const idempotency = require('../middleware/idempotency');
 const validate   = require('../middleware/validate');
 const logger     = require('../logger');
 const metrics    = require('../metrics');
+const { requireRole } = auth;
+const { launch } = require('../runs');
 
 const intOrNull = (v) => (Number.isInteger(v) ? v : null);
 
@@ -86,8 +88,25 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// POST /tests/:id/retry — re-run a finished run's config as a NEW run (new id, epoch 0)
+router.post('/:id/retry', auth, requireRole('operator'), async (req, res) => {
+  try {
+    const run = await repo.findById(req.params.id);
+    if (!run) return res.status(404).json({ error: 'Not found' });
+    if (!['completed', 'failed', 'cancelled'].includes(run.status)) {
+      return res.status(409).json({ error: `Cannot retry: status is '${run.status}'` });
+    }
+    const created = await launch(run.config);
+    logger.info('Test run retried', { id: run.id, newId: created.id });
+    return res.status(201).json(created);
+  } catch (err) {
+    logger.error('POST /tests/:id/retry error', { error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // PATCH /tests/:id/status — internal worker status update
-router.patch('/:id/status', auth, async (req, res) => {
+router.patch('/:id/status', auth, requireRole('worker'), async (req, res) => {
   try {
     const run = await repo.findById(req.params.id);
     if (!run) return res.status(404).json({ error: 'Not found' });
@@ -122,7 +141,7 @@ router.patch('/:id/status', auth, async (req, res) => {
 });
 
 // POST /tests/:id/heartbeat — internal worker heartbeat
-router.post('/:id/heartbeat', auth, async (req, res) => {
+router.post('/:id/heartbeat', auth, requireRole('worker'), async (req, res) => {
   try {
     const run = await repo.findById(req.params.id);
     if (!run) return res.status(404).json({ error: 'Not found' });

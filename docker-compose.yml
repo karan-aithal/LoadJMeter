@@ -114,6 +114,9 @@ services:
       MAX_RETRIES:        ${MAX_RETRIES:-3}
       REAPER_STALE_MS:    ${REAPER_STALE_MS:-20000}
       REAPER_INTERVAL_MS: ${REAPER_INTERVAL_MS:-5000}
+      RESULTS_DIR:        /results   # chaos/bench JSON for the dashboard's Chaos tab
+    volumes:
+      - ./docs/benchmarks/results:/results:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4000/healthz"]
       interval: 10s
@@ -157,6 +160,8 @@ services:
     build:
       context: ./services/ui
       dockerfile: Dockerfile
+      args:
+        VITE_GRAFANA_URL: ${VITE_GRAFANA_URL:-http://localhost:3001}
     image: loadtest/ui:latest
     container_name: ui
     ports:
