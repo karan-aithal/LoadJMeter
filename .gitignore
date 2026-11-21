@@ -73,3 +73,6 @@ infra/okd/postgres-tls/out/
 infra/okd/okd.env.local
 .okd-shim/
 loadjmeter.env.local
+
+# graphify knowledge-graph output (generated)
+graphify-out/
