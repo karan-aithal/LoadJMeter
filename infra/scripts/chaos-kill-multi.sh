@@ -34,6 +34,10 @@ ready_workers() { k get deploy worker -o jsonpath='{.status.readyReplicas}' 2>/d
 
 echo "==> Capacity: $WORKERS workers${CPU_REQUEST:+ @ cpu request $CPU_REQUEST}"
 if [[ -n $CPU_REQUEST && $CPU_REQUEST != "$ORIG_CPU" ]]; then
+  # Shrink to one worker first: a previous run's extra pods still hold CPU on this node (3.8 CPU) and would leave the
+  # re-sized pods Pending (Insufficient cpu). Pausing KEDA at 1 scales down immediately instead of after its cooldown.
+  k annotate scaledobject "$SO" autoscaling.keda.sh/paused-replicas=1 --overwrite >/dev/null
+  for _ in $(seq 90); do [[ $(k get deploy worker -o jsonpath='{.status.replicas}') == 1 ]] && break; sleep 2; done
   k set resources deploy/worker --requests=cpu="$CPU_REQUEST" >/dev/null
   k rollout status deploy/worker --timeout=180s >/dev/null
 fi
