@@ -46,6 +46,10 @@ spec:
         - name: provisioning
           configMap:
             name: grafana-provisioning
+            # Grafana reads provisioning/datasources/ and provisioning/dashboards/ as directories
+            items:
+              - { key: datasources.yml, path: datasources/datasources.yml }
+              - { key: dashboards.yml,  path: dashboards/dashboards.yml }
         - name: dashboards
           configMap:
             name: grafana-dashboards

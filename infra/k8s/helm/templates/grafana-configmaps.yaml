@@ -1,0 +1,32 @@
+{{- /*
+  Grafana provisioning + dashboards. The contents are passed in with --set-file from infra/monitoring/grafana
+  (see GRAFANA_SET_FILES in the Makefile) because Helm can only read files inside the chart and docker-compose
+  mounts that same directory. `required` makes an empty value a template error instead of a Grafana with no dashboards.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  datasources.yml: |
+{{ required "grafana.provisioning.datasources is empty: deploy with `make k8s-deploy` (it passes --set-file)" .Values.grafana.provisioning.datasources | indent 4 }}
+  dashboards.yml: |
+{{ required "grafana.provisioning.dashboards is empty: deploy with `make k8s-deploy` (it passes --set-file)" .Values.grafana.provisioning.dashboards | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  fleet-dashboard.json: |
+{{ required "grafana.dashboards.fleet is empty: deploy with `make k8s-deploy` (it passes --set-file)" .Values.grafana.dashboards.fleet | indent 4 }}
+  sut-dashboard.json: |
+{{ required "grafana.dashboards.sut is empty: deploy with `make k8s-deploy` (it passes --set-file)" .Values.grafana.dashboards.sut | indent 4 }}

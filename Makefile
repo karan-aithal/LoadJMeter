@@ -65,6 +65,14 @@ HELM_RELEASE ?= loadtest
 HELM_CHART   := infra/k8s/helm
 NAMESPACE    := loadtest-system
 IMAGES       := loadtest/sut:latest loadtest/control-api:latest loadtest/worker:latest
+# Grafana files live in infra/monitoring/grafana (shared with docker-compose); Helm can only read inside the chart,
+# so they are passed in as values. The chart fails if these are missing.
+GRAFANA_DIR  := infra/monitoring/grafana
+GRAFANA_SET_FILES := \
+  --set-file grafana.provisioning.datasources=$(GRAFANA_DIR)/provisioning/datasources/datasources.yml \
+  --set-file grafana.provisioning.dashboards=$(GRAFANA_DIR)/provisioning/dashboards/dashboards.yml \
+  --set-file grafana.dashboards.fleet=$(GRAFANA_DIR)/dashboards/fleet-dashboard.json \
+  --set-file grafana.dashboards.sut=$(GRAFANA_DIR)/dashboards/sut-dashboard.json
 
 k8s-build:
 	docker build -t loadtest/sut:latest           services/sut
@@ -78,7 +86,7 @@ k8s-load: k8s-build
 	done
 
 helm-lint:
-	helm lint $(HELM_CHART) -f $(HELM_CHART)/values.yaml \
+	helm lint $(HELM_CHART) -f $(HELM_CHART)/values.yaml $(GRAFANA_SET_FILES) \
 	  --set secrets.jwtSecret=test --set secrets.apiKey=test \
 	  --set secrets.postgresPassword=test
 
@@ -88,6 +96,7 @@ k8s-deploy: k8s-load
 	  --namespace $(NAMESPACE) \
 	  -f $(HELM_CHART)/values.yaml \
 	  -f $(HELM_CHART)/values-local.yaml \
+	  $(GRAFANA_SET_FILES) \
 	  --set secrets.jwtSecret=$${JWT_SECRET} \
 	  --set secrets.apiKey=$${API_KEY} \
 	  --set secrets.postgresPassword=$${POSTGRES_PASSWORD:-changeme} \
