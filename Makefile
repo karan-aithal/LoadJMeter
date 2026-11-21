@@ -21,7 +21,10 @@ test-sut:
 test-worker:
 	cd services/worker && npm test
 
-test: test-sut test-worker
+test-control-api:
+	cd services/control-api && npm test
+
+test: test-sut test-worker test-control-api
 
 # ── Phase 1: manual k6 runs ─────────────────────────────────────────────────
 # Ensure SUT is up first: make up
