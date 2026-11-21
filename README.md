@@ -51,7 +51,7 @@ kubectl -n loadtest-system port-forward svc/grafana 3001:3000
 | 0 — SUT                      | ✅ | `services/sut` — 3 endpoints + /metrics + SLOs |
 | 1 — k6 worker manual run     | ✅ | `services/worker/scripts/k6` — thresholds + stages |
 | 2 — Control API              | ✅ | Auth + idempotent POST /tests + queue dispatch |
-| 3 — Queue-driven fleet       | ✅ | Atomic dequeue, retry, dead-letter, heartbeat |
+| 3 — Queue-driven fleet       | ✅ | Atomic dequeue, retry, dead-letter, heartbeat, reaper (requeues jobs from dead workers) |
 | 4 — Metrics + dashboards     | ✅ | Prometheus RED/USE + Grafana + INCONCLUSIVE verdict |
 | 5 — Kubernetes / Helm        | ✅ | Helm chart, NetworkPolicy, resource limits, PDB |
 | 6 — KEDA autoscaling         | ✅ | ScaledObject + chaos test scripts + runbooks |
@@ -74,6 +74,10 @@ kubectl -n loadtest-system port-forward svc/grafana 3001:3000
 - [Worker Crash Loop](docs/runbooks/worker-crash-loop.md)
 - [SLO Breach](docs/runbooks/slo-breach.md)
 
+## Benchmarks
+
+- [Chaos recovery](docs/benchmarks/chaos-recovery.md): worker kill / network partition results and method
+
 ## Makefile Targets
 
 ```
@@ -81,9 +85,10 @@ make up              # docker compose up --build -d
 make down            # docker compose down
 make test            # npm test for sut + worker
 make k8s-deploy      # helm upgrade --install (requires kind cluster)
-make keda-install    # install KEDA into cluster
+make keda-install    # install KEDA into cluster (kind/Helm path)
 make keda-apply      # apply ScaledObject
-make load-queue N=5  # push 5 jobs → watch scale-up
+make okd-keda-install okd-keda-apply   # same for OKD (see infra/okd/README.md)
+make load-queue N=6  # push 6 jobs → time scale-up to 5 workers
 make chaos-kill      # kill worker mid-job → verify requeue
 ```
 

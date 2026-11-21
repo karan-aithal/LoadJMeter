@@ -1,0 +1,88 @@
+{
+  "result": "PASS",
+  "fail_reason": "",
+  "job_id": "38203b42-1426-4296-9198-a1c64a3db0df",
+  "killed_worker": "worker-f44c954d4-7lnrp",
+  "retry_worker": "worker-f44c954d4-9mrqf",
+  "final_status": "completed",
+  "mttr_seconds": 21.6,
+  "completion_seconds": 105.5,
+  "duplicate_completions": 0,
+  "in_dead_letter": false,
+  "left_in_redis": false,
+  "config": {
+    "workers": 3,
+    "concurrent_jobs": 3,
+    "worker_cpu_request": "250m"
+  },
+  "jobs": [
+    {
+      "job_id": "f8dc3d7d-db61-4143-87d0-cf11ed41baa5",
+      "scenario": "fast",
+      "vus": 2,
+      "duration": "45s",
+      "victim": false,
+      "started_on": "worker-f44c954d4-6x4nn",
+      "finished_on": "worker-f44c954d4-6x4nn",
+      "final_status": "completed",
+      "successful_completions": 1,
+      "reaper_events": 0,
+      "executions_started": 1,
+      "ok": true,
+      "completion_seconds_since_kill": 65.6
+    },
+    {
+      "job_id": "38203b42-1426-4296-9198-a1c64a3db0df",
+      "scenario": "slow",
+      "vus": 5,
+      "duration": "60s",
+      "victim": true,
+      "started_on": "worker-f44c954d4-7lnrp",
+      "finished_on": "worker-f44c954d4-9mrqf",
+      "final_status": "completed",
+      "successful_completions": 1,
+      "reaper_events": 1,
+      "executions_started": 1,
+      "ok": true,
+      "completion_seconds_since_kill": 105.5
+    },
+    {
+      "job_id": "ecd311f4-d2e5-4649-8e52-b42669055fd7",
+      "scenario": "cpu-heavy",
+      "vus": 10,
+      "duration": "45s",
+      "victim": false,
+      "started_on": "worker-f44c954d4-ztnr6",
+      "finished_on": "worker-f44c954d4-ztnr6",
+      "final_status": "completed",
+      "successful_completions": 1,
+      "reaper_events": 0,
+      "executions_started": 1,
+      "ok": true,
+      "completion_seconds_since_kill": 65.6
+    }
+  ],
+  "env": {
+    "git_sha": "160b3acda4ed05336b09307e1ea38f73c44caf4a",
+    "uncommitted_files": 0,
+    "worker_image": "image-registry.openshift-image-registry.svc:5000/loadtest-system/worker@sha256:d47daf293e62346647b2a31d817a139d9ce8ba3f654320d97b30c7b458d4d21b",
+    "control_api_image": "image-registry.openshift-image-registry.svc:5000/loadtest-system/control-api@sha256:a99334595d58d8ccf7a750e095245ebcbdc12f7fe4d92734e3dcd777176d2372",
+    "worker_resources": {
+      "limits": {
+        "cpu": "1",
+        "memory": "512Mi"
+      },
+      "requests": {
+        "cpu": "250m",
+        "memory": "256Mi"
+      }
+    },
+    "worker_replicas": 3,
+    "reaper_env": {
+      "REAPER_INTERVAL_MS": "5000",
+      "HEARTBEAT_INTERVAL_MS": "5000",
+      "MAX_RETRIES": "3",
+      "REAPER_STALE_MS": "20000"
+    }
+  }
+}

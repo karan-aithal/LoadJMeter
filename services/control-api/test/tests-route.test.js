@@ -14,6 +14,7 @@ const jwt      = require('jsonwebtoken');
 const { app }  = require('../src/index');
 const repo     = require('../src/db/repositories/test-run-repo');
 const producer = require('../src/queue/redis-producer');
+const metrics  = require('../src/metrics');
 
 const TOKEN = jwt.sign(
   { sub: 'api-user', role: 'operator' },
@@ -198,6 +199,69 @@ describe('PATCH /tests/:id/status', () => {
       status: 'running',
       workerId: 'worker-1',
     }));
+  });
+});
+
+describe('stale-worker fencing', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('PATCH forwards the worker epoch to the repo', async () => {
+    repo.findById.mockResolvedValue({ id: 'u', status: 'running', epoch: 1 });
+    repo.updateStatus.mockResolvedValue({ id: 'u', status: 'completed' });
+    await request(app).patch('/tests/u/status').set('x-api-key', INTERNAL_API_KEY)
+      .send({ status: 'completed', epoch: 1, nextEpoch: 2 });
+    expect(repo.updateStatus).toHaveBeenCalledWith('u', expect.objectContaining({ epoch: 1, nextEpoch: 2 }));
+  });
+
+  it('PATCH from a fenced-out worker is 409 and reports the current owner epoch', async () => {
+    repo.findById.mockResolvedValue({ id: 'u', status: 'pending', epoch: 2 });
+    repo.updateStatus.mockResolvedValue(null);
+    const res = await request(app).patch('/tests/u/status').set('x-api-key', INTERNAL_API_KEY)
+      .send({ status: 'completed', epoch: 1 });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ error: 'fenced', epoch: 2 });
+  });
+
+  it('heartbeat from a fenced-out worker is 409', async () => {
+    repo.findById.mockResolvedValue({ id: 'u', status: 'running', epoch: 2 });
+    repo.updateStatus.mockResolvedValue(null);
+    const res = await request(app).post('/tests/u/heartbeat').set('x-api-key', INTERNAL_API_KEY)
+      .send({ workerId: 'w', epoch: 1 });
+    expect(res.status).toBe(409);
+  });
+
+  it('heartbeat on a cancelled run is 409 so the worker stops it', async () => {
+    repo.findById.mockResolvedValue({ id: 'u', status: 'cancelled', epoch: 1 });
+    repo.updateStatus.mockResolvedValue(null);
+    const res = await request(app).post('/tests/u/heartbeat').set('x-api-key', INTERNAL_API_KEY)
+      .send({ workerId: 'w', epoch: 1 });
+    expect(res.status).toBe(409);
+  });
+
+  it('GET /metrics (no auth) exposes the reaper and fenced counters; a fenced write increments the latter', async () => {
+    repo.findById.mockResolvedValue({ id: 'u', status: 'pending', epoch: 2 });
+    repo.updateStatus.mockResolvedValue(null);
+    const before = metrics.snapshot().fenced_writes_total;
+    await request(app).patch('/tests/u/status').set('x-api-key', INTERNAL_API_KEY).send({ status: 'completed', epoch: 1 });
+    const res = await request(app).get('/metrics');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('control_api_reaped_total');
+    expect(res.text).toContain(`control_api_fenced_writes_total ${before + 1}`);
+  });
+
+  it('DELETE sets the cancel tombstone before the DB write', async () => {
+    repo.findById.mockResolvedValue({ id: 'u', status: 'running' });
+    repo.cancel.mockResolvedValue({ id: 'u', status: 'cancelled' });
+    await request(app).delete('/tests/u').set('Authorization', AUTH);
+    expect(producer.markCancelled).toHaveBeenCalledWith('u');
+    expect(producer.markCancelled.mock.invocationCallOrder[0]).toBeLessThan(repo.cancel.mock.invocationCallOrder[0]);
+  });
+
+  it('DELETE is 409 if the run finished between the check and the cancel', async () => {
+    repo.findById.mockResolvedValue({ id: 'u', status: 'running' });
+    repo.cancel.mockResolvedValue(null);
+    const res = await request(app).delete('/tests/u').set('Authorization', AUTH);
+    expect(res.status).toBe(409);
   });
 });
 

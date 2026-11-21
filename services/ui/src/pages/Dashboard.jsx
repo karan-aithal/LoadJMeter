@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useAuth } from '../App.jsx';
+import { useAuth } from '../auth.js';
 import { api } from '../api/client.js';
 import TestForm from '../components/TestForm.jsx';
 import TestHistoryTable from '../components/TestHistoryTable.jsx';

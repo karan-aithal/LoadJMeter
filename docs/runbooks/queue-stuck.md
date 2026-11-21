@@ -29,7 +29,7 @@ kubectl -n loadtest-system exec $REDIS_POD -- redis-cli llen jobs:processing
 kubectl -n loadtest-system exec $REDIS_POD -- redis-cli llen jobs:pending
 kubectl -n loadtest-system exec $REDIS_POD -- redis-cli llen jobs:dead-letter
 ```
-If `jobs:processing` > 0 but no workers are running → orphaned jobs. Move them back:
+The control-api **reaper** auto-requeues `running` jobs with no heartbeat for `REAPER_STALE_MS` (20000), checked every `REAPER_INTERVAL_MS` (5000) — worst case ~25s; after `MAX_RETRIES` they go to `jobs:dead-letter`. Look for `job_reaped` in control-api logs. If entries persist past that, manual move (unsafe while workers are alive):
 ```bash
 kubectl -n loadtest-system exec $REDIS_POD -- \
   redis-cli eval "local jobs = redis.call('lrange','jobs:processing',0,-1); for _,j in ipairs(jobs) do redis.call('lpush','jobs:pending',j) end; redis.call('del','jobs:processing'); return #jobs" 0

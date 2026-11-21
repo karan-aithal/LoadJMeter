@@ -1,10 +1,9 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { AuthContext } from './auth.js';
 import Dashboard from './pages/Dashboard.jsx';
 import TestDetail from './pages/TestDetail.jsx';
 
-export const AuthContext = createContext(null);
-export const useAuth = () => useContext(AuthContext);
 
 const s = {
   nav: { display: 'flex', alignItems: 'center', gap: 24, padding: '12px 24px',

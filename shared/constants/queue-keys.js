@@ -4,6 +4,7 @@
 // Workers and control-api must use the same keys.
 module.exports = {
   JOBS_PENDING:     process.env.JOBS_PENDING_QUEUE || 'jobs:pending',
+  JOBS_PROCESSING:  process.env.JOBS_PROCESSING_QUEUE || 'jobs:processing',
   JOBS_DEAD_LETTER: process.env.JOBS_DL_QUEUE     || 'jobs:dead-letter',
   JOB_LOCK_PREFIX:  'job:lock:',
   HEARTBEAT_PREFIX: 'job:heartbeat:',

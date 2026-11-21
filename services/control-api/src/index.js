@@ -26,6 +26,9 @@ app.get('/readyz', async (_req, res) => {
 app.use('/auth',  require('./routes/auth'));
 app.use('/tests', require('./routes/tests'));
 
+// Prometheus scrape target (no auth, like /healthz)
+app.get('/metrics', (_req, res) => res.type('text/plain; version=0.0.4').send(require('./metrics').render()));
+
 // OpenAPI UI at /api-docs
 setupOpenApi(app);
 
@@ -48,9 +51,11 @@ async function start() {
   const server = app.listen(PORT, () =>
     logger.info('Control API started', { port: PORT })
   );
+  const stopReaper = require('./queue/reaper').startReaper();
 
   process.on('SIGTERM', () => {
     logger.info('SIGTERM received, shutting down');
+    stopReaper();
     server.close(() => process.exit(0));
   });
 }

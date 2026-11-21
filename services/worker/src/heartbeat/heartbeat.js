@@ -6,11 +6,11 @@ const logger = require('../logger');
 const CONTROL_API_URL = process.env.CONTROL_API_URL || 'http://control-api:4000';
 const WORKER_API_KEY = process.env.WORKER_API_KEY || process.env.API_KEY;
 
-async function postHeartbeat(jobId, workerId) {
+async function postHeartbeat(jobId, workerId, epoch) {
 	try {
 		await axios.post(
 			`${CONTROL_API_URL}/tests/${jobId}/heartbeat`,
-			{ workerId },
+			{ workerId, epoch },
 			{
 				timeout: 5000,
 				headers: {
@@ -19,15 +19,21 @@ async function postHeartbeat(jobId, workerId) {
 			}
 		);
 	} catch (err) {
-		logger.warn('heartbeat failed', { jobId, error: err.message });
+		// 409 = control-api fenced us out (job reaped/re-owned, finished or cancelled): not a transient failure
+		err.fenced = err.response?.status === 409;
+		logger.warn(err.fenced ? 'heartbeat fenced' : 'heartbeat failed', { jobId, error: err.message });
+		throw err; // let startHeartbeat's callbacks fire
 	}
 }
 
-function startHeartbeat(jobId, workerId, { onFailure } = {}) {
+function startHeartbeat(jobId, workerId, epoch, { onFailure, onFenced } = {}) {
 	const intervalMs = parseInt(process.env.HEARTBEAT_INTERVAL_MS || '5000', 10);
 	const timer = setInterval(() => {
-		postHeartbeat(jobId, workerId).catch(() => {
-			if (typeof onFailure === 'function') onFailure();
+		postHeartbeat(jobId, workerId, epoch).catch((err) => {
+			if (err.fenced) {
+				clearInterval(timer);
+				if (typeof onFenced === 'function') onFenced();
+			} else if (typeof onFailure === 'function') onFailure();
 		});
 	}, intervalMs);
 

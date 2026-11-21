@@ -8,6 +8,17 @@ const auth       = require('../middleware/auth');
 const idempotency = require('../middleware/idempotency');
 const validate   = require('../middleware/validate');
 const logger     = require('../logger');
+const metrics    = require('../metrics');
+
+const intOrNull = (v) => (Number.isInteger(v) ? v : null);
+
+// The row exists (checked by the caller) but the write was refused: the run is terminal (finished/cancelled) or
+// the writer's epoch is older than the current owner's. Either way the worker must stop acting on this job.
+function fenced(req, res, run, epoch) {
+  metrics.inc('fenced_writes_total');
+  logger.warn('fenced_write', { jobId: req.params.id, epoch, rowEpoch: run.epoch, rowStatus: run.status, path: req.path });
+  return res.status(409).json({ error: 'fenced', status: run.status, epoch: run.epoch });
+}
 
 // POST /tests — create + enqueue
 router.post('/', auth, idempotency, validate, async (req, res) => {
@@ -64,7 +75,9 @@ router.delete('/:id', auth, async (req, res) => {
       return res.status(409).json({ error: `Cannot cancel: status is '${run.status}'` });
     }
 
+    await producer.markCancelled(req.params.id); // tombstone first: stops reaper/worker re-queues racing this cancel
     const updated = await repo.cancel(req.params.id);
+    if (!updated) return res.status(409).json({ error: 'Cannot cancel: run just finished' });
     logger.info('Test run cancelled', { id: req.params.id });
     return res.json(updated);
   } catch (err) {
@@ -87,6 +100,7 @@ router.patch('/:id/status', auth, async (req, res) => {
       startedAt,
       completedAt,
     } = req.body;
+    const epoch = intOrNull(req.body.epoch);
 
     const updated = await repo.updateStatus(req.params.id, {
       status,
@@ -95,7 +109,10 @@ router.patch('/:id/status', auth, async (req, res) => {
       errorMessage,
       startedAt,
       completedAt,
+      epoch,
+      nextEpoch: intOrNull(req.body.nextEpoch),
     });
+    if (!updated) return fenced(req, res, run, epoch);
 
     return res.json(updated);
   } catch (err) {
@@ -111,9 +128,9 @@ router.post('/:id/heartbeat', auth, async (req, res) => {
     if (!run) return res.status(404).json({ error: 'Not found' });
 
     const workerId = req.body.workerId || req.query.workerId || null;
-    const updated = await repo.updateStatus(req.params.id, {
-      workerId,
-    });
+    const epoch = intOrNull(req.body.epoch);
+    const updated = await repo.updateStatus(req.params.id, { workerId, epoch });
+    if (!updated) return fenced(req, res, run, epoch);
 
     return res.json({ status: 'ok', id: updated.id, updatedAt: updated.updated_at });
   } catch (err) {

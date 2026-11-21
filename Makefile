@@ -21,7 +21,10 @@ test-sut:
 test-worker:
 	cd services/worker && npm test
 
-test: test-sut test-worker
+test-control-api:
+	cd services/control-api && npm test
+
+test: test-sut test-worker test-control-api
 
 # ── Phase 1: manual k6 runs ─────────────────────────────────────────────────
 # Ensure SUT is up first: make up
@@ -104,7 +107,7 @@ k8s-down:
 	kubectl delete namespace $(NAMESPACE) --ignore-not-found
 
 # ── Phase 6: KEDA autoscaling + chaos tests ──────────────────────────────────
-.PHONY: keda-install keda-apply load-queue chaos-kill
+.PHONY: keda-install keda-apply load-queue bench-backlog chaos-kill
 
 keda-install:
 	helm repo add kedacore https://kedacore.github.io/charts
@@ -123,7 +126,11 @@ keda-apply:
 # Push N jobs → watch scale-up → wait → watch scale-down
 # Requires: API_KEY set, kubectl context pointing at $(NAMESPACE)
 load-queue:
-	NAMESPACE=$(NAMESPACE) bash infra/scripts/load-queue-test.sh $${N:-5} $${VUS:-10} $${DURATION:-30s}
+	NAMESPACE=$(NAMESPACE) bash infra/scripts/load-queue-test.sh $${N:-6} $${VUS:-10} $${DURATION:-30s}
+
+# Sustained backlog: N jobs at once, sample fleet CPU/throughput until drained
+bench-backlog:
+	NAMESPACE=$(NAMESPACE) bash infra/scripts/load-backlog-bench.sh $${N:-30} $${VUS:-10} $${DURATION:-30s}
 
 # Kill a worker mid-job, verify job requeues
 chaos-kill:
@@ -143,7 +150,8 @@ ui-build:
 
 # ── OKD (CRC okd preset) + external TLS PostgreSQL ───────────────────────────
 # See infra/okd/README.md. The chaos script calls kubectl, so a kubectl->oc shim dir goes on PATH.
-.PHONY: okd-prereqs okd-tools okd-tls okd-secrets okd-build okd-deploy okd-smoke okd-chaos okd-down
+.PHONY: okd-prereqs okd-tools okd-tls okd-secrets okd-build okd-deploy okd-smoke okd-chaos okd-chaos-bench okd-partition-bench okd-partition-late-bench okd-chaos-matrix chaos-bench okd-down \
+        okd-keda-install okd-keda-apply okd-keda-down
 
 okd-prereqs:
 	bash infra/okd/scripts/cluster-prereqs.sh
@@ -170,5 +178,39 @@ okd-chaos:
 	@mkdir -p .okd-shim && ln -sf "$$(command -v oc)" .okd-shim/kubectl
 	PATH="$(CURDIR)/.okd-shim:$$PATH" NAMESPACE=loadtest-system bash infra/scripts/chaos-kill-worker.sh
 
+# N fault-injection runs + median/p95 (results in docs/benchmarks/results/). Run from a clean tree: each result records the git SHA.
+okd-chaos-bench:
+	@$(MAKE) --no-print-directory chaos-bench KIND=chaos-run SCRIPT=chaos-kill-worker.sh
+
+okd-partition-bench:
+	@$(MAKE) --no-print-directory chaos-bench KIND=partition-run SCRIPT=chaos-partition-worker.sh
+
+okd-partition-late-bench:
+	@$(MAKE) --no-print-directory chaos-bench KIND=partition-late-run SCRIPT=chaos-partition-worker.sh HEAL_MODE=after RUNS=$${RUNS:-5}
+
+okd-chaos-matrix:
+	bash infra/scripts/chaos-matrix.sh
+
+chaos-bench:
+	@mkdir -p .okd-shim && ln -sf "$$(command -v oc)" .okd-shim/kubectl
+	@for i in $$(seq -w 1 $${RUNS:-10}); do \
+	  PATH="$(CURDIR)/.okd-shim:$$PATH" NAMESPACE=loadtest-system CHAOS_KIND=$(KIND) HEAL_MODE=$(or $(HEAL_MODE),during) OUT=docs/benchmarks/results/$(KIND)-$$i.json bash infra/scripts/$(SCRIPT) >/dev/null || echo "run $$i did not PASS"; \
+	done
+	bash infra/scripts/chaos-summary.sh docs/benchmarks/results/$(KIND)-*.json
+
 okd-down:
 	oc delete project loadtest-system
+
+# Optional KEDA add-on for OKD (not part of okd-deploy; see infra/okd/README.md). `keda-install` is the kind/Helm path.
+okd-keda-install:
+	helm repo add kedacore https://kedacore.github.io/charts
+	helm repo update
+	helm upgrade --install keda kedacore/keda --namespace keda --create-namespace \
+	  --version 2.14.0 -f infra/okd/keda-values.yaml --wait --timeout 180s
+
+okd-keda-apply:
+	kubectl apply -f infra/okd/keda-networkpolicy.yaml -f infra/k8s/keda/trigger-auth-redis.yaml -f infra/k8s/keda/scaledobject-worker.yaml
+
+okd-keda-down:
+	kubectl delete -f infra/k8s/keda/scaledobject-worker.yaml -f infra/k8s/keda/trigger-auth-redis.yaml -f infra/okd/keda-networkpolicy.yaml --ignore-not-found
+	helm uninstall keda --namespace keda

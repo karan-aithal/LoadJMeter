@@ -39,8 +39,16 @@ async function enqueue(job) {
   return true;
 }
 
+// Cancel tombstone: set BEFORE the DB write in DELETE /tests/:id. The reaper's and the worker's Lua re-queue scripts
+// check it atomically with their LPUSH, so nothing is queued once a cancel has started. (A cancel that begins after
+// a push is the ordinary cancel-of-a-queued-job case: the worker skips it when its 'running' write is refused.)
+const CANCELLED_PREFIX = 'jobs:cancelled:';
+async function markCancelled(id) {
+  await getClient().set(`${CANCELLED_PREFIX}${id}`, '1', 'EX', 86400);
+}
+
 async function disconnect() {
   if (client) { await client.quit(); client = null; }
 }
 
-module.exports = { enqueue, disconnect, getClient };
+module.exports = { enqueue, disconnect, getClient, markCancelled, CANCELLED_PREFIX };

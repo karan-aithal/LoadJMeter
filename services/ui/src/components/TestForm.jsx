@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '../App.jsx';
+import { useAuth } from '../auth.js';
 import { api } from '../api/client.js';
 
 const SCENARIOS = ['base', 'fast', 'slow', 'cpu-heavy'];
