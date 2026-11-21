@@ -5,6 +5,8 @@ const logger = require('../logger');
 
 const PENDING_QUEUE = process.env.JOBS_PENDING_QUEUE || 'jobs:pending';
 const PROCESSING_QUEUE = process.env.JOBS_PROCESSING_QUEUE || 'jobs:processing';
+const DEAD_LETTER_QUEUE = process.env.JOBS_DL_QUEUE || 'jobs:dead-letter';
+const CANCELLED_PREFIX = 'jobs:cancelled:';
 
 let client;
 
@@ -42,18 +44,35 @@ async function ackJob(job) {
 }
 
 // Re-queue only if we still hold the entry. If the reaper already moved it (we were fenced out), LREM is 0
-// and nothing is pushed, so a stale worker can't create a second copy. Returns true if re-queued.
+// and nothing is pushed, so a stale worker can't create a second copy. ARGV[3] = cancel tombstone: a run being
+// cancelled is dropped, not re-queued. Returns true only if the retry was queued.
 const REQUEUE = `
+if redis.call('LREM', KEYS[1], 1, ARGV[1]) == 1 then
+  if redis.call('EXISTS', ARGV[3]) == 0 then redis.call('LPUSH', KEYS[2], ARGV[2]) return 1 end
+  return 2
+end
+return 0`;
+
+async function requeueJob(originalJob, retryJob) {
+	const redis = getClient();
+	const r = await redis.eval(REQUEUE, 2, PROCESSING_QUEUE, PENDING_QUEUE, JSON.stringify(originalJob),
+		JSON.stringify(retryJob), `${CANCELLED_PREFIX}${originalJob.id}`);
+	return r === 1;
+}
+
+// Dead-letter = ack + DLQ push as ONE atomic step. If they were separate, a crash between them either lost the DLQ
+// copy or left a duplicate; now either both happen or neither (and the reaper finishes a missing one).
+const DEAD_LETTER = `
 if redis.call('LREM', KEYS[1], 1, ARGV[1]) == 1 then
   redis.call('LPUSH', KEYS[2], ARGV[2])
   return 1
 end
 return 0`;
 
-async function requeueJob(originalJob, retryJob) {
+async function moveToDeadLetter(originalJob, deadJob) {
 	const redis = getClient();
-	const moved = await redis.eval(REQUEUE, 2, PROCESSING_QUEUE, PENDING_QUEUE, JSON.stringify(originalJob), JSON.stringify(retryJob));
-	return moved === 1;
+	return (await redis.eval(DEAD_LETTER, 2, PROCESSING_QUEUE, DEAD_LETTER_QUEUE,
+		JSON.stringify(originalJob), JSON.stringify(deadJob))) === 1;
 }
 
 async function quit() {
@@ -68,6 +87,7 @@ module.exports = {
 	popJob,
 	ackJob,
 	requeueJob,
+	moveToDeadLetter,
 	quit,
 	PENDING_QUEUE,
 	PROCESSING_QUEUE,

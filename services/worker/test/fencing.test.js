@@ -56,5 +56,6 @@ describe('requeueJob', () => {
 		const [lua, nKeys, from, to, orig, retry] = evalMock.mock.calls[0];
 		expect(lua).toMatch(/LREM.*==\s*1[\s\S]*LPUSH/);
 		expect([nKeys, from, to, orig, retry]).toEqual([2, 'jobs:processing', 'jobs:pending', '{"id":"a"}', '{"id":"a","attempt":1}']);
+		expect(evalMock.mock.calls[0][6]).toBe('jobs:cancelled:a'); // cancel tombstone key
 	});
 });

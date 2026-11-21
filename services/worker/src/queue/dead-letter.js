@@ -1,17 +1,16 @@
 'use strict';
 
-const { getClient } = require('./redis-consumer');
+const { moveToDeadLetter } = require('./redis-consumer');
 
-const DLQ = process.env.JOBS_DL_QUEUE || 'jobs:dead-letter';
-
-async function pushDeadLetter(job, reason) {
-	const redis = getClient();
-	const payload = {
+// Atomically move the job we hold from jobs:processing to the dead-letter queue. `job` is the payload as popped
+// (needed to find the entry); the dead-lettered copy carries the final attempt and the reason.
+async function deadLetterJob(job, attempt, reason) {
+	return moveToDeadLetter(job, {
 		...job,
+		attempt,
 		deadLetterReason: reason,
 		deadLetteredAt: new Date().toISOString(),
-	};
-	await redis.lpush(DLQ, JSON.stringify(payload));
+	});
 }
 
-module.exports = { pushDeadLetter, DLQ };
+module.exports = { deadLetterJob };
