@@ -1,14 +1,14 @@
 {
   "result": "PASS",
   "fail_reason": "",
-  "job_id": "e500e062-0d4d-4a5f-b960-8b994b2d785d",
-  "killed_worker": "worker-68c974f4bd-zdnkb",
-  "retry_worker": "worker-68c974f4bd-2mz6b",
+  "job_id": "dfb66373-a2ad-41a7-90ff-5f25ac645033",
+  "killed_worker": "worker-f44c954d4-f5n6c",
+  "retry_worker": "worker-f44c954d4-r6599",
   "final_status": "completed",
   "verdict": "PASS",
-  "mttr_seconds": 22.3,
+  "mttr_seconds": 16.9,
   "requeue_seen_seconds": null,
-  "completion_seconds": 90.2,
+  "completion_seconds": 85.6,
   "retry_attempt_seen_by_worker": 1,
   "successful_completions": 1,
   "executions_started_on_surviving_pods": 1,
@@ -21,10 +21,10 @@
     "vus": 2
   },
   "env": {
-    "git_sha": "1490d210872978a8a15ea6e5f4b0997a5901d1d2",
+    "git_sha": "160b3acda4ed05336b09307e1ea38f73c44caf4a",
     "uncommitted_files": 0,
-    "worker_image": "image-registry.openshift-image-registry.svc:5000/loadtest-system/worker@sha256:38e8730218b99cd168b123597f6592063982a72db109dded735a93119f17aa3a",
-    "control_api_image": "image-registry.openshift-image-registry.svc:5000/loadtest-system/control-api@sha256:bc5ac1da35b3dd45a36111a1b3a345280306356879b7899c7a2b1c780411f7da",
+    "worker_image": "image-registry.openshift-image-registry.svc:5000/loadtest-system/worker@sha256:d47daf293e62346647b2a31d817a139d9ce8ba3f654320d97b30c7b458d4d21b",
+    "control_api_image": "image-registry.openshift-image-registry.svc:5000/loadtest-system/control-api@sha256:a99334595d58d8ccf7a750e095245ebcbdc12f7fe4d92734e3dcd777176d2372",
     "worker_resources": {
       "limits": {
         "cpu": "1",

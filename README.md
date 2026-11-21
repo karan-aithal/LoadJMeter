@@ -74,6 +74,10 @@ kubectl -n loadtest-system port-forward svc/grafana 3001:3000
 - [Worker Crash Loop](docs/runbooks/worker-crash-loop.md)
 - [SLO Breach](docs/runbooks/slo-breach.md)
 
+## Benchmarks
+
+- [Chaos recovery](docs/benchmarks/chaos-recovery.md): worker kill / network partition results and method
+
 ## Makefile Targets
 
 ```
