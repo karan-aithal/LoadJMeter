@@ -73,6 +73,7 @@ router.delete('/:id', auth, async (req, res) => {
       return res.status(409).json({ error: `Cannot cancel: status is '${run.status}'` });
     }
 
+    await producer.markCancelled(req.params.id); // tombstone first: stops reaper/worker re-queues racing this cancel
     const updated = await repo.cancel(req.params.id);
     if (!updated) return res.status(409).json({ error: 'Cannot cancel: run just finished' });
     logger.info('Test run cancelled', { id: req.params.id });

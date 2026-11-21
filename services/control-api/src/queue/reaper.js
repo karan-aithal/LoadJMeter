@@ -15,10 +15,10 @@ const MAX_RETRIES = parseInt(process.env.MAX_RETRIES        || '3', 10);
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 
 // Atomic move: only the caller whose LREM succeeds pushes, so concurrent reapers can't duplicate.
-// Empty ARGV[2] = just drop the entry.
+// Empty ARGV[2] = just drop the entry. ARGV[3] = cancel tombstone key: if the run is being cancelled, drop instead of push.
 const MOVE = `
 if redis.call('LREM', KEYS[1], 1, ARGV[1]) == 1 then
-  if ARGV[2] ~= '' then redis.call('LPUSH', KEYS[2], ARGV[2]) end
+  if ARGV[2] ~= '' and (ARGV[3] == '' or redis.call('EXISTS', ARGV[3]) == 0) then redis.call('LPUSH', KEYS[2], ARGV[2]) end
   return 1
 end
 return 0`;
@@ -60,14 +60,17 @@ async function reapOnce({ redis = producer.getClient(), runs = repo, now = Date.
     const silentMs   = now - new Date(row.updated_at).getTime();
     const alreadyClaimed = (row.epoch || 0) >= fenceEpoch; // an earlier claim whose Redis move never happened
 
-    // Terminal: worker died before ack, or run cancelled. Never re-queue it. The one exception is a reaper claim
-    // that marked the run failed (dead) but died before pushing the payload to the dead-letter queue.
-    if (TERMINAL.includes(row.status) && !(row.status === 'failed' && dead && alreadyClaimed)) {
-      await redis.eval(MOVE, 2, PROCESSING, PENDING, raw, '');
+    // 'failed' + retries exhausted + payload still in processing = the dead-letter copy was never written: a worker
+    // died between recording 'failed' and its atomic move, or a reaper claim died before its move. Finish it.
+    const needsDlq = row.status === 'failed' && dead;
+
+    // Other terminal rows (finished before ack, or cancelled): drop the entry, never re-queue it.
+    if (TERMINAL.includes(row.status) && !needsDlq) {
+      await redis.eval(MOVE, 2, PROCESSING, PENDING, raw, '', '');
       continue;
     }
 
-    if (!alreadyClaimed) {
+    if (!alreadyClaimed && !needsDlq) {
       // 'running': judged by the heartbeat. 'pending': a just-popped job has an old updated_at (its queue time) until
       // the worker PATCHes running, so judge it by how long it has sat in processing instead.
       const stale = row.status === 'running' ? silentMs >= STALE_MS
@@ -83,10 +86,11 @@ async function reapOnce({ redis = producer.getClient(), runs = repo, now = Date.
       if (!claimed) continue; // finished, cancelled or heartbeated since we read it: the worker still owns it
     }
 
-    const retry   = { ...job, attempt, lastError: 'worker lost (no heartbeat)' };
+    const reason  = needsDlq ? (row.error_message || 'max retries exceeded') : 'worker lost (no heartbeat)';
+    const retry   = { ...job, attempt, lastError: reason };
     if (dead) Object.assign(retry, { deadLetterReason: retry.lastError, deadLetteredAt: new Date(now).toISOString() });
 
-    const moved = await redis.eval(MOVE, 2, PROCESSING, dead ? DEAD : PENDING, raw, JSON.stringify(retry));
+    const moved = await redis.eval(MOVE, 2, PROCESSING, dead ? DEAD : PENDING, raw, JSON.stringify(retry), `${producer.CANCELLED_PREFIX}${job.id}`);
     if (moved !== 1) continue; // another reaper got it first
 
     logger.warn('job_reaped', { jobId: job.id, attempt, silentMs, deadLettered: dead, resumedClaim: alreadyClaimed });
@@ -104,4 +108,4 @@ function startReaper() {
   return () => clearInterval(timer);
 }
 
-module.exports = { reapOnce, startReaper };
+module.exports = { reapOnce, startReaper, MOVE };

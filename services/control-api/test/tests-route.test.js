@@ -237,6 +237,14 @@ describe('stale-worker fencing', () => {
     expect(res.status).toBe(409);
   });
 
+  it('DELETE sets the cancel tombstone before the DB write', async () => {
+    repo.findById.mockResolvedValue({ id: 'u', status: 'running' });
+    repo.cancel.mockResolvedValue({ id: 'u', status: 'cancelled' });
+    await request(app).delete('/tests/u').set('Authorization', AUTH);
+    expect(producer.markCancelled).toHaveBeenCalledWith('u');
+    expect(producer.markCancelled.mock.invocationCallOrder[0]).toBeLessThan(repo.cancel.mock.invocationCallOrder[0]);
+  });
+
   it('DELETE is 409 if the run finished between the check and the cancel', async () => {
     repo.findById.mockResolvedValue({ id: 'u', status: 'running' });
     repo.cancel.mockResolvedValue(null);

@@ -1,7 +1,7 @@
 'use strict';
 
 jest.mock('../src/db/repositories/test-run-repo');
-jest.mock('../src/queue/redis-producer', () => ({ getClient: jest.fn() }));
+jest.mock('../src/queue/redis-producer', () => ({ getClient: jest.fn(), CANCELLED_PREFIX: 'jobs:cancelled:' }));
 
 const { reapOnce } = require('../src/queue/reaper');
 
@@ -111,9 +111,28 @@ describe('reapOnce', () => {
     expect(redis.eval.mock.calls[0][3]).toBe('jobs:dead-letter');
   });
 
-  it("does not mistake a worker's own dead-letter (epoch = attempt+1) for a reaper claim", async () => {
-    const { redis, runs } = setup({ id: 'a', attempt: 2 }, row('a', 'failed', 60000, 3));
+  // Regression: the worker recorded 'failed' (DB) but crashed before its atomic processing->DLQ move, so the
+  // dead-letter copy was never written and the reaper used to drop the entry.
+  it("writes the missing dead-letter copy for a worker's own 'failed' run", async () => {
+    const dbRow = { ...row('a', 'failed', 60000, 3), error_message: 'k6 exited 99' };
+    const { redis, runs } = setup({ id: 'a', attempt: 2 }, dbRow);
+    expect(await reapOnce({ redis, runs, now: NOW })).toBe(1);
+    expect(runs.claimStale).not.toHaveBeenCalled();
+    const [, , , to, , payload] = redis.eval.mock.calls[0];
+    expect(to).toBe('jobs:dead-letter');
+    expect(JSON.parse(payload)).toMatchObject({ attempt: 3, deadLetterReason: 'k6 exited 99' });
+  });
+
+  it("does not dead-letter a 'failed' run that still has retries left", async () => {
+    const { redis, runs } = setup({ id: 'a', attempt: 0 }, row('a', 'failed', 60000, 1));
     await reapOnce({ redis, runs, now: NOW });
     expect(redis.eval.mock.calls[0][5]).toBe(''); // plain drop
+  });
+
+  // Regression: a cancel started after the reaper's DB claim. The Lua move must see the tombstone atomically.
+  it('passes the cancel tombstone key so the move cannot queue behind a cancel', async () => {
+    const { redis, runs } = setup({ id: 'a' }, row('a', 'running', 60000));
+    await reapOnce({ redis, runs, now: NOW });
+    expect(redis.eval.mock.calls[0][6]).toBe('jobs:cancelled:a');
   });
 });
