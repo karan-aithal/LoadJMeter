@@ -20,11 +20,12 @@ scrape_configs:
     scrape_interval: 10s
 
   # worker: use dns_sd so additional replicas (docker compose scale) are
-  # discovered automatically without a config reload.
+  # discovered automatically without a config reload. Plain compose DNS returns every
+  # replica's IP for the service name (`tasks.worker` only exists in Docker Swarm).
   - job_name: worker
     dns_sd_configs:
       - names:
-          - tasks.worker
+          - worker
         type: A
         port: 9464
     metrics_path: /metrics
@@ -37,5 +38,5 @@ scrape_configs:
     static_configs:
       - targets:
           - control-api:4000
-    metrics_path: /healthz
+    metrics_path: /metrics
     scrape_interval: 15s
