@@ -7,8 +7,7 @@
                     "start":  "node src/index.js",
                     "dev":  "nodemon src/index.js",
                     "test":  "jest --runInBand --forceExit",
-                    "lint":  "eslint src",
-                    "deps:install":  "node ../../infra/scripts/npm-install-with-fallback.js"
+                    "lint":  "eslint src"
                 },
     "dependencies":  {
                          "axios":  "^1.6.7",

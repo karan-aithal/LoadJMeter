@@ -8,8 +8,7 @@
                     "dev":  "nodemon src/index.js",
                     "test":  "jest --runInBand --forceExit",
                     "lint":  "eslint src",
-                    "spec:yaml":  "node scripts/export-openapi.js",
-                    "deps:install":  "node ../../infra/scripts/npm-install-with-fallback.js"
+                    "spec:yaml":  "node scripts/export-openapi.js"
                 },
     "dependencies":  {
                          "express":  "^4.18.2",
