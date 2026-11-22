@@ -30,6 +30,9 @@ spec:
               value: "admin"
             - name: GF_AUTH_ANONYMOUS_ENABLED
               value: "false"
+            # the UI embeds panels in iframes; the default X-Frame-Options: deny blocks them
+            - name: GF_SECURITY_ALLOW_EMBEDDING
+              value: "true"
           volumeMounts:
             - name: provisioning
               mountPath: /etc/grafana/provisioning
