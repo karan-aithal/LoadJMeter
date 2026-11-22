@@ -189,8 +189,11 @@ distributed-load-test-platform/
 │   │   ├── package.json
 │   │   ├── src/
 │   │   │   ├── index.js
+│   │   │   ├── runs.js                   # launch(config): create run + enqueue
+│   │   │   ├── metrics.js                # reaped_total / fenced_writes_total, GET /metrics
 │   │   │   ├── routes/
-│   │   │   │   ├── tests.js              # POST/GET/DELETE /tests
+│   │   │   │   ├── tests.js              # POST/GET/DELETE /tests, POST /tests/:id/retry
+│   │   │   │   ├── ops.js                # operator API: /ops/queues, /ops/stream (SSE), DLQ requeue/purge, /ops/chaos
 │   │   │   │   └── auth.js
 │   │   │   ├── middleware/
 │   │   │   │   ├── auth.js               # API key / JWT
@@ -210,14 +213,18 @@ distributed-load-test-platform/
 │   │   │   │   └── repositories/
 │   │   │   │       └── test-run-repo.js
 │   │   │   └── openapi/
-│   │   │       └── generate.js
+│   │   │       └── generate.js           # source of truth for docs/api-spec/openapi.yaml
+│   │   ├── scripts/
+│   │   │   └── export-openapi.js         # npm run spec:yaml
 │   │   ├── migrations/
 │   │   │   ├── 001_init.sql
 │   │   │   ├── 002_test_runs.sql
 │   │   │   ├── 003_indexes.sql
 │   │   │   └── 004_cost_tracking.sql     # Phase 9
 │   │   └── test/
-│   │       └── tests-route.test.js
+│   │       ├── tests-route.test.js
+│   │       ├── ops.test.js
+│   │       └── openapi.test.js           # route coverage, $ref, YAML == code spec
 │   │
 │   ├── worker/                           # Phase 1/3 — Test fleet
 │   │   ├── Dockerfile
@@ -253,8 +260,11 @@ distributed-load-test-platform/
 │       │   └── index.html
 │       └── src/
 │           ├── App.jsx
+│           ├── auth.js
 │           ├── api/
 │           │   └── client.js
+│           ├── hooks/
+│           │   └── useOpsStream.js       # SSE feed, falls back to 3s polling
 │           ├── components/
 │           │   ├── TestForm.jsx
 │           │   ├── TestHistoryTable.jsx
@@ -263,7 +273,10 @@ distributed-load-test-platform/
 │           │   └── GrafanaEmbed.jsx
 │           └── pages/
 │               ├── Dashboard.jsx
-│               └── TestDetail.jsx
+│               ├── TestDetail.jsx
+│               ├── Pipeline.jsx          # live SVG node/edge diagram
+│               ├── Queues.jsx            # queue contents, DLQ requeue/purge
+│               └── Chaos.jsx             # recorded chaos/bench results
 │
 ├── infra/
 │   │
@@ -288,6 +301,7 @@ distributed-load-test-platform/
 │   │   │       ├── queue-deployment.yaml
 │   │   │       ├── prometheus-deployment.yaml
 │   │   │       ├── grafana-deployment.yaml
+│   │   │       ├── grafana-configmaps.yaml   # provisioning + dashboards, fed by --set-file
 │   │   │       ├── services.yaml
 │   │   │       ├── configmaps.yaml
 │   │   │       ├── secrets.yaml
@@ -317,20 +331,28 @@ distributed-load-test-platform/
 │   │   ├── alertmanager/
 │   │   │   └── alertmanager.yml
 │   │   └── grafana/
-│   │       ├── provisioning/
-│   │       │   ├── datasources.yml
-│   │       │   └── dashboards.yml
+│   │       ├── provisioning/             # Grafana only reads these subdirectories
+│   │       │   ├── datasources/
+│   │       │   │   └── datasources.yml   # uid: prometheus
+│   │       │   └── dashboards/
+│   │       │       └── dashboards.yml
 │   │       └── dashboards/
 │   │           ├── fleet-dashboard.json
 │   │           ├── sut-dashboard.json
 │   │           ├── cost-tracking.json    # Phase 9
 │   │           └── fleet-by-region.json  # Phase 9
 │   │
+│   ├── okd/                              # OKD (CRC) Kustomize deploy, see infra/okd/README.md
+│   │   ├── base/                         # routes.yaml (ui SSE timeout), control-api.yaml (chaos-results mount)
+│   │   ├── overlays/crc/
+│   │   └── scripts/                      # deploy.sh, create-secrets.sh, chaos-results.sh, ...
+│   │
 │   └── scripts/
 │       ├── seed-db.sh
 │       ├── load-queue-test.sh
 │       └── chaos-kill-worker.sh
 │
+├── .gitlab-ci.yml                        # lint + test, UI build, helm lint
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml                        # lint, test, build, scan
