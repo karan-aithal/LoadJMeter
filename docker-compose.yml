@@ -114,6 +114,7 @@ services:
       MAX_RETRIES:        ${MAX_RETRIES:-3}
       REAPER_STALE_MS:    ${REAPER_STALE_MS:-20000}
       REAPER_INTERVAL_MS: ${REAPER_INTERVAL_MS:-5000}
+      OPS_STREAM_MS:      ${OPS_STREAM_MS:-2000}
       RESULTS_DIR:        /results   # chaos/bench JSON for the dashboard's Chaos tab
     volumes:
       - ./docs/benchmarks/results:/results:ro

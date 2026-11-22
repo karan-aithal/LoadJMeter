@@ -44,6 +44,23 @@ make k8s-status
 kubectl -n loadtest-system port-forward svc/grafana 3001:3000
 ```
 
+## Operator Dashboard
+
+Log in to the UI (JWT, role `operator`). Tabs:
+
+| Tab | What it shows |
+|-----|---------------|
+| Runs | Launch form, history, cancel, **Retry** on failed/cancelled runs (creates a new run) |
+| Pipeline | Live node/edge diagram: UI → Control API → `jobs:pending` → `jobs:processing` → workers → Postgres, plus DLQ and reaper. Click a node for details; pause freezes the animation |
+| Queues | Contents of `jobs:pending` / `jobs:processing` / `jobs:dead-letter`; **Requeue** or **Purge** DLQ entries; reaped and fenced-write counters |
+| Chaos | Recorded worker-kill / partition runs from `docs/benchmarks/results/*.json`: pass rate, lost jobs, duplicate completions, MTTR p50/p95, per-run timeline. Read-only; warns when runs came from different git SHAs |
+
+Live data comes from the SSE feed `GET /api/ops/stream` (every `OPS_STREAM_MS`, default 2000). The browser's `EventSource` cannot set headers, so the JWT goes in `?token=` for that one route (it can appear in access logs). If the stream fails the UI falls back to 3 s polling.
+
+Operator API (JWT `operator` only, documented in `/api-docs`): `GET /ops/queues`, `GET /ops/stream`, `POST /ops/dlq/{id}/requeue`, `DELETE /ops/dlq/{id}`, `GET /ops/chaos`, `POST /tests/{id}/retry`. `PATCH /tests/{id}/status` and the heartbeat require the worker `x-api-key`. `GET /metrics` exposes `reaped_total` and `fenced_writes_total` for Prometheus.
+
+Chaos data source: control-api reads `RESULTS_DIR` (compose mounts `docs/benchmarks/results` read-only at `/results`). On OKD run `make okd-results` after new chaos runs (`okd-deploy` does it too).
+
 ## Phase Completion
 
 | Phase | Status | Artifact |
@@ -55,8 +72,8 @@ kubectl -n loadtest-system port-forward svc/grafana 3001:3000
 | 4 — Metrics + dashboards     | ✅ | Prometheus RED/USE + Grafana + INCONCLUSIVE verdict |
 | 5 — Kubernetes / Helm        | ✅ | Helm chart, NetworkPolicy, resource limits, PDB |
 | 6 — KEDA autoscaling         | ✅ | ScaledObject + chaos test scripts + runbooks |
-| 7 — React UI                 | ✅ | Launch form + live status + Grafana embeds |
-| 8 — CI/CD + security         | ✅ | GitHub Actions: lint → test → build → Trivy → smoke |
+| 7 — React UI                 | ✅ | Launch form + live status + Grafana embeds + operator dashboard (Pipeline, Queues, Chaos) |
+| 8 — CI/CD + security         | ✅ | GitHub Actions: lint → test → build → Trivy → smoke; GitLab CI: lint + test, UI build, helm lint |
 | 9 — Multi-region + RBAC      | 🔜 | LocalStack SQS, region routing, JWT RBAC |
 
 ## Services
@@ -83,8 +100,10 @@ kubectl -n loadtest-system port-forward svc/grafana 3001:3000
 ```
 make up              # docker compose up --build -d
 make down            # docker compose down
-make test            # npm test for sut + worker
-make k8s-deploy      # helm upgrade --install (requires kind cluster)
+make test            # npm test for sut + worker + control-api
+make k8s-deploy      # helm upgrade --install (requires kind cluster; passes the Grafana files with --set-file)
+make helm-lint       # lint the chart (same --set-file inputs)
+make okd-results     # publish chaos results for the dashboard's Chaos tab on OKD
 make keda-install    # install KEDA into cluster (kind/Helm path)
 make keda-apply      # apply ScaledObject
 make okd-keda-install okd-keda-apply   # same for OKD (see infra/okd/README.md)
