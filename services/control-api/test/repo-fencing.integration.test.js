@@ -24,7 +24,7 @@ d('test-run-repo fencing (postgres)', () => {
     admin = new Client({ connectionString: URL }); await admin.connect();
     await admin.query(`CREATE SCHEMA ${schema}`);
     await admin.query(`SET search_path TO ${schema}, public`);
-    for (const f of ['002_test_runs.sql', '004_fencing_epoch.sql']) {
+    for (const f of ['001_init.sql', '002_test_runs.sql', '004_fencing_epoch.sql']) { // 001 creates uuid-ossp, which 002 needs
       await admin.query(fs.readFileSync(path.join(__dirname, '../migrations', f), 'utf8'));
     }
     // repo uses the shared pool: point it at the throwaway schema
