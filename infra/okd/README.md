@@ -42,6 +42,7 @@ The DB password is read from `PG_PASSWORD` or the untracked `loadjmeter.env.loca
 ## Verify
 ```bash
 make okd-smoke        # Route -> POST /tests -> completed
+make okd-results      # publish docs/benchmarks/results/*.json to the dashboard's Chaos tab (okd-deploy does this too; re-run after new chaos runs)
 make okd-chaos        # kills a worker pod mid-job; prints "Recovered from hard worker kill in N s" (needs the reaper branch merged)
 oc -n loadtest-system logs deploy/control-api | grep -E "Migrations complete|Reaper started"
 # TLS negative checks (from the host):

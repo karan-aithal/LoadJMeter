@@ -1,0 +1,49 @@
+# GitLab CI: lint + unit tests per service, UI build, Helm lint.
+# Not covered here (still in .github/workflows/ci.yml): image build + Trivy scan, k6 smoke.
+stages: [test, build]
+
+default:
+  image: node:20.11.0-alpine3.19
+  interruptible: true
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+test:
+  stage: test
+  parallel:
+    matrix:
+      - SERVICE: [sut, control-api, worker]
+  variables:
+    # control-api tests need these; Postgres integration tests skip themselves without TEST_DATABASE_URL
+    JWT_SECRET: ci-secret-minimum-32-chars-long-xxxxx
+    API_KEY: ci-api-key
+  cache:
+    key: npm-$SERVICE-$CI_COMMIT_REF_SLUG
+    paths: [services/$SERVICE/.npm/]
+  script:
+    - cd services/$SERVICE
+    - npm ci --cache .npm --prefer-offline
+    - npm run lint
+    - npm test
+
+ui-build:
+  stage: build
+  cache:
+    key: npm-ui-$CI_COMMIT_REF_SLUG
+    paths: [services/ui/.npm/]
+  script:
+    - cd services/ui
+    - npm ci --cache .npm --prefer-offline
+    - npm run build
+
+helm-lint:
+  stage: build
+  image:
+    name: alpine/helm:3.14.0
+    entrypoint: [""]
+  script:
+    - apk add --no-cache make
+    - make helm-lint

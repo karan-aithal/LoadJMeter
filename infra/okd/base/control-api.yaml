@@ -24,6 +24,7 @@ spec:
             - { containerPort: 4000, name: http }
           env:
             - { name: PORT, value: "4000" }
+            - { name: RESULTS_DIR, value: /results }
           envFrom:
             - configMapRef: { name: loadtest-config }
             - secretRef: { name: control-api-secrets }   # DATABASE_URL, JWT_SECRET, API_KEY
@@ -46,8 +47,12 @@ spec:
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
             - { name: pg-ca, mountPath: /etc/pg-ca, readOnly: true }
+            - { name: chaos-results, mountPath: /results, readOnly: true }
       volumes:
         - { name: tmp, emptyDir: {} }
+        # Chaos tab data; created by `make okd-results` (optional: pod starts, tab is just empty, without it)
+        - name: chaos-results
+          configMap: { name: chaos-results, optional: true }
         - name: pg-ca
           configMap: { name: pg-ca }
 ---

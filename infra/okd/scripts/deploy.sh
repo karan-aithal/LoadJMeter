@@ -17,6 +17,7 @@ fi
 
 $OC get ns "$NAMESPACE" >/dev/null 2>&1 || $OC new-project "$NAMESPACE" >/dev/null
 bash "$HERE/create-secrets.sh"
+bash "$HERE/chaos-results.sh"
 bash "$HERE/build-images.sh"
 
 # base/ is written for the CRC default IP; rewrite if overridden

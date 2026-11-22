@@ -11,6 +11,9 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: ui
+  annotations:
+    # /api/ops/stream is a long-lived SSE connection; the HAProxy default (30s) would cut it between idle gaps
+    haproxy.router.openshift.io/timeout: 1h
 spec:
   to: { kind: Service, name: ui }
   port: { targetPort: http }

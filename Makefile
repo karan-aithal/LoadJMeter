@@ -159,7 +159,7 @@ ui-build:
 
 # ── OKD (CRC okd preset) + external TLS PostgreSQL ───────────────────────────
 # See infra/okd/README.md. The chaos script calls kubectl, so a kubectl->oc shim dir goes on PATH.
-.PHONY: okd-prereqs okd-tools okd-tls okd-secrets okd-build okd-deploy okd-smoke okd-chaos okd-chaos-bench okd-partition-bench okd-partition-late-bench okd-chaos-matrix chaos-bench okd-down \
+.PHONY: okd-prereqs okd-tools okd-tls okd-secrets okd-results okd-build okd-deploy okd-smoke okd-chaos okd-chaos-bench okd-partition-bench okd-partition-late-bench okd-chaos-matrix chaos-bench okd-down \
         okd-keda-install okd-keda-apply okd-keda-down
 
 okd-prereqs:
@@ -173,6 +173,10 @@ okd-tls:
 
 okd-secrets:
 	bash infra/okd/scripts/create-secrets.sh
+
+# Publish docs/benchmarks/results/*.json for the dashboard's Chaos tab (also done by okd-deploy)
+okd-results:
+	bash infra/okd/scripts/chaos-results.sh
 
 okd-build:
 	bash infra/okd/scripts/build-images.sh
