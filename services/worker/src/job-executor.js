@@ -11,6 +11,7 @@ function createExecutor({
 	queue, // { ackJob, requeueJob, deadLetterJob }
 	now = Date.now,
 }) {
+	const limit = () => (typeof maxRetries === 'function' ? maxRetries() : maxRetries); // function = live setting
 	const getNextAttempt = (job) => (Number.isInteger(job.attempt) ? job.attempt : 0) + 1;
 
 	return async function executeJob(job) {
@@ -80,7 +81,7 @@ function createExecutor({
 			return;
 		}
 
-		if (attempt >= maxRetries) {
+		if (attempt >= limit()) {
 			const reason = parsed.errorMessage || 'max retries exceeded';
 			const r = await updateRunStatus(job.id, {
 				status: 'failed',
@@ -117,7 +118,7 @@ function createExecutor({
 		const queued = await queue.requeueJob(job, retryJob);
 		done('retry');
 		logger.warn(queued ? 'job requeued for retry' : 'retry not queued (already moved by reaper, or run cancelled)',
-			{ jobId: job.id, attempt, maxRetries });
+			{ jobId: job.id, attempt, maxRetries: limit() });
 	};
 }
 

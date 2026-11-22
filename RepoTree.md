@@ -11,6 +11,7 @@ distributed-load-test-platform/
 ├── .gitignore
 ├── .env.example
 ├── docker-compose.yml
+├── docker-compose.chaos.yml           # opt-in: docker socket + CHAOS_DRIVER=docker for real worker kills
 ├── docker-compose.k8s-local.yml
 ├── Makefile
 │
@@ -57,12 +58,18 @@ distributed-load-test-platform/
 │   │   │   ├── metrics.js                # reaped_total / fenced_writes_total, GET /metrics
 │   │   │   ├── routes/
 │   │   │   │   ├── tests.js              # POST/GET/DELETE /tests, POST /tests/:id/retry
-│   │   │   │   ├── ops.js                # operator API: /ops/queues, /ops/stream (SSE), DLQ requeue/purge, /ops/chaos
+│   │   │   │   ├── ops.js                # operator API: /ops/queues, /ops/stream (SSE, ?ms=), DLQ requeue/purge, /ops/chaos
+│   │   │   │   ├── ops-control.js        # settings, reaper run, bulk queue actions, worker commands, infra chaos, audit
 │   │   │   │   └── auth.js
 │   │   │   ├── middleware/
 │   │   │   │   ├── auth.js               # API key / JWT
 │   │   │   │   ├── idempotency.js
 │   │   │   │   └── validate.js
+│   │   │   ├── ops/
+│   │   │   │   ├── settings.js           # runtime settings (Redis hash ops:settings), env = defaults
+│   │   │   │   ├── audit.js              # capped operator action log (ops:audit)
+│   │   │   │   ├── workers.js            # worker fleet presence + command channel
+│   │   │   │   └── infra.js              # docker / k8s drivers for real worker kill, restart, partition
 │   │   │   ├── queue/
 │   │   │   │   └── redis-producer.js
 │   │   │   ├── db/
@@ -100,8 +107,11 @@ distributed-load-test-platform/
 │   │   │   ├── runner/
 │   │   │   │   ├── k6-runner.js
 │   │   │   │   └── result-parser.js
+│   │   │   ├── control/
+│   │   │   │   ├── control.js            # presence + operator commands (pause, resume, drain, crash, partition)
+│   │   │   │   └── state.js              # shared runtime state (settings, simulated partition)
 │   │   │   ├── lifecycle/
-│   │   │   │   └── graceful-shutdown.js  # SIGTERM handling
+│   │   │   │   └── graceful-shutdown.js  # SIGTERM handling, operator drain
 │   │   │   ├── heartbeat/
 │   │   │   │   └── heartbeat.js
 │   │   │   └── metrics/
@@ -120,19 +130,22 @@ distributed-load-test-platform/
 │           ├── api/
 │           │   └── client.js
 │           ├── hooks/
-│           │   └── useOpsStream.js       # SSE feed, falls back to 3s polling
+│           │   └── useOpsStream.js       # SSE feed (pausable, interval), falls back to polling
 │           ├── components/
 │           │   ├── TestForm.jsx
 │           │   ├── TestHistoryTable.jsx
 │           │   ├── LiveStatus.jsx
 │           │   ├── VerdictBadge.jsx
+│           │   ├── ops-ui.jsx            # shared buttons, type-to-confirm, stream bar
+│           │   ├── ControlPanels.jsx     # settings editor, fleet controls, infra panel, queue actions, audit log
+│           │   ├── ChaosLab.jsx          # kill-worker experiment
 │           │   └── GrafanaEmbed.jsx
 │           └── pages/
 │               ├── Dashboard.jsx
 │               ├── TestDetail.jsx
-│               ├── Pipeline.jsx          # live SVG node/edge diagram
+│               ├── Pipeline.jsx          # live SVG diagram: draggable nodes, clickable connections, editable settings, expand
 │               ├── Queues.jsx            # queue contents, DLQ requeue/purge
-│               └── Chaos.jsx             # recorded chaos/bench results
+│               └── Chaos.jsx             # fault injection (experiment, workers, infra, audit) + recorded results
 │
 ├── infra/
 │   │

@@ -13,6 +13,11 @@ function setRunCanceller(fn) {
 	cancelCurrentRun = fn;
 }
 
+// Operator "drain": stop picking up jobs and exit once the current one is done (unlike a signal, does not cancel it).
+function drain() {
+	shuttingDown = true;
+}
+
 function installSignalHandlers() {
 	const handler = () => {
 		if (shuttingDown) return;
@@ -31,4 +36,5 @@ module.exports = {
 	installSignalHandlers,
 	isShuttingDown,
 	setRunCanceller,
+	drain,
 };

@@ -14,7 +14,10 @@ const {
 	installSignalHandlers,
 	isShuttingDown,
 	setRunCanceller,
+	drain,
 } = require('./lifecycle/graceful-shutdown');
+const { createControl } = require('./control/control');
+const { getClient } = require('./queue/redis-consumer');
 
 const WORKER_ID =
   process.env.WORKER_ID ||
@@ -24,9 +27,11 @@ const WORKER_ID =
 const MAX_RETRIES = parseInt(process.env.MAX_RETRIES || '3', 10);
 const metrics = startMetricsServer();
 
-const executeJob = createExecutor({
+const control = createControl({ redis: getClient(), sub: getClient().duplicate(), workerId: WORKER_ID, logger, drain });
+
+const runJob = createExecutor({
 	workerId: WORKER_ID,
-	maxRetries: MAX_RETRIES,
+	maxRetries: () => control.int('maxRetries', MAX_RETRIES),
 	metrics,
 	logger,
 	updateRunStatus,
@@ -37,12 +42,19 @@ const executeJob = createExecutor({
 	queue: { ackJob, requeueJob, deadLetterJob },
 });
 
+async function executeJob(job) {
+	control.setJob(job.id);
+	try { await runJob(job); } finally { control.setJob(null); }
+}
+
 async function runLoop() {
 	installSignalHandlers();
+	await control.start();
 	logger.info('worker started', { workerId: WORKER_ID, maxRetries: MAX_RETRIES });
 
 	while (!isShuttingDown()) {
 		try {
+			if (control.isPaused()) { await new Promise((r) => setTimeout(r, 1000)); continue; }
 			metrics.incQueuePoll();
 			const job = await popJob({ timeoutSeconds: 2 });
 			if (!job) continue;
@@ -58,6 +70,7 @@ async function runLoop() {
 		}
 	}
 
+	await control.stop();
 	await metrics.close();
 	await quit();
 	logger.info('worker stopped');

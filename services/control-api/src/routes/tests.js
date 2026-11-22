@@ -11,6 +11,7 @@ const logger     = require('../logger');
 const metrics    = require('../metrics');
 const { requireRole } = auth;
 const { launch } = require('../runs');
+const settings = require('../ops/settings');
 
 const intOrNull = (v) => (Number.isInteger(v) ? v : null);
 
@@ -25,6 +26,7 @@ function fenced(req, res, run, epoch) {
 // POST /tests — create + enqueue
 router.post('/', auth, idempotency, validate, async (req, res) => {
   try {
+    if ((await settings.fresh()).intakePaused) return res.status(503).json({ error: 'Intake paused by an operator' });
     // Idempotent: return existing run if key already used
     const existing = await repo.findByIdempotencyKey(req.idempotencyKey);
     if (existing) {

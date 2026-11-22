@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth.js';
 import { api } from '../api/client.js';
 import useOpsStream from '../hooks/useOpsStream.js';
+import { StreamBar } from '../components/ops-ui.jsx';
+import { QueueActions, SettingsEditor } from '../components/ControlPanels.jsx';
 
 const th = { padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', borderBottom: '1px solid #2d3148' };
 const td = { padding: '8px 12px', fontSize: 13, color: '#e2e8f0', borderBottom: '1px solid #1e2235' };
@@ -57,7 +59,10 @@ function QueueTable({ title, queue, dlq, onRequeue, onPurge, busy }) {
 
 export default function Queues() {
   const { token } = useAuth();
-  const { data, mode, error } = useOpsStream(token);
+  const stream = useOpsStream(token);
+  const { data, error } = stream;
+  const [schema, setSchema] = useState(null);
+  useEffect(() => { api.settings(token).then((r) => setSchema(r.schema)).catch(() => {}); }, [token]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null); // { ok, text, runId? }
 
@@ -74,7 +79,7 @@ export default function Queues() {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <h2 style={{ fontSize: 16, color: '#e2e8f0' }}>Queues</h2>
-        <span style={{ fontSize: 12, color: mode === 'live' ? '#4ade80' : mode === 'error' ? '#f87171' : '#fbbf24' }}>● {mode}</span>
+        <StreamBar s={stream} />
       </div>
       {error && <p style={{ color: '#f87171', fontSize: 13, marginTop: 8 }}>{error}</p>}
       {msg && (
@@ -90,6 +95,13 @@ export default function Queues() {
           <Counter label="reaped (since API start)" value={data.counters.reaped_total} color={data.counters.reaped_total ? '#fbbf24' : '#e2e8f0'} />
           <Counter label="fenced writes (since start)" value={data.counters.fenced_writes_total} />
         </div>
+        <section style={{ background: '#1a1d2e', borderRadius: 8, padding: 16, marginTop: 20 }}>
+          <h3 style={{ fontSize: 14, color: '#7c83fd', marginBottom: 10 }}>Controls</h3>
+          <QueueActions settings={data.settings} token={token} />
+          <div style={{ marginTop: 10 }}>
+            <SettingsEditor keys={['maxRetries', 'reaperPaused', 'reaperStaleMs', 'reaperIntervalMs']} values={data.settings} schema={schema} token={token} />
+          </div>
+        </section>
         <QueueTable title="jobs:dead-letter" queue={data.queues.dlq} dlq busy={busy} onRequeue={requeue} onPurge={purge} />
         <QueueTable title="jobs:processing" queue={data.queues.processing} />
         <QueueTable title="jobs:pending" queue={data.queues.pending} />

@@ -6,13 +6,12 @@ const producer = require('./redis-producer');
 const repo     = require('../db/repositories/test-run-repo');
 const logger   = require('../logger');
 const metrics  = require('../metrics');
+const settings = require('../ops/settings');
 
 const PENDING    = process.env.JOBS_PENDING_QUEUE    || 'jobs:pending';
 const PROCESSING = process.env.JOBS_PROCESSING_QUEUE || 'jobs:processing';
 const DEAD       = process.env.JOBS_DL_QUEUE         || 'jobs:dead-letter';
-const STALE_MS    = parseInt(process.env.REAPER_STALE_MS    || '20000', 10); // 4x heartbeat interval
-const INTERVAL_MS = parseInt(process.env.REAPER_INTERVAL_MS || '5000', 10);
-const MAX_RETRIES = parseInt(process.env.MAX_RETRIES        || '3', 10);
+// staleMs / intervalMs / maxRetries / paused are runtime settings (ops/settings.js): env is only the default
 const TERMINAL = ['completed', 'failed', 'cancelled'];
 
 // Atomic move: only the caller whose LREM succeeds pushes, so concurrent reapers can't duplicate.
@@ -36,7 +35,10 @@ return 0`;
 // popped a job and died before PATCHing 'running' leaves no DB heartbeat, so the time in processing is the signal.
 const firstSeen = new Map();
 
+const status = { lastRunAt: null, lastReaped: 0, runs: 0 }; // shown in the Pipeline's Reaper node
+
 async function reapOnce({ redis = producer.getClient(), runs = repo, now = Date.now(), seen = firstSeen } = {}) {
+  const { reaperStaleMs: STALE_MS, maxRetries: MAX_RETRIES } = settings.get();
   const raws = await redis.lrange(PROCESSING, 0, -1);
   for (const r of seen.keys()) if (!raws.includes(r)) seen.delete(r);
   for (const r of raws) if (!seen.has(r)) seen.set(r, now);
@@ -101,13 +103,23 @@ async function reapOnce({ redis = producer.getClient(), runs = repo, now = Date.
   return reaped;
 }
 
+// Self-rescheduling so a changed interval applies on the next pass; reads settings each pass (pause, stale, retries).
 function startReaper() {
-  const timer = setInterval(() => {
-    reapOnce().catch((err) => logger.error('reaper error', { error: err.message }));
-  }, INTERVAL_MS);
-  timer.unref();
-  logger.info('Reaper started', { staleMs: STALE_MS, intervalMs: INTERVAL_MS });
-  return () => clearInterval(timer);
+  let timer, stopped = false;
+  const tick = async () => {
+    const cfg = await settings.load();
+    if (!cfg.reaperPaused) {
+      try {
+        const n = await reapOnce();
+        Object.assign(status, { lastRunAt: new Date().toISOString(), lastReaped: n, runs: status.runs + 1 });
+      } catch (err) { logger.error('reaper error', { error: err.message }); }
+    }
+    if (!stopped) { timer = setTimeout(tick, settings.get().reaperIntervalMs); timer.unref(); }
+  };
+  timer = setTimeout(tick, settings.get().reaperIntervalMs); timer.unref();
+  const cfg = settings.get();
+  logger.info('Reaper started', { staleMs: cfg.reaperStaleMs, intervalMs: cfg.reaperIntervalMs });
+  return () => { stopped = true; clearTimeout(timer); };
 }
 
-module.exports = { reapOnce, startReaper, MOVE };
+module.exports = { reapOnce, startReaper, MOVE, status };

@@ -2,6 +2,7 @@
 
 const axios = require('axios');
 const logger = require('./logger');
+const state = require('./control/state');
 
 const CONTROL_API_URL = process.env.CONTROL_API_URL || 'http://control-api:4000';
 const WORKER_API_KEY = process.env.WORKER_API_KEY || process.env.API_KEY;
@@ -15,6 +16,7 @@ async function updateRunStatus(jobId, payload) {
 	let lastErr;
 	for (let i = 1; i <= STATUS_TRIES; i++) {
 		try {
+			if (state.partitionedUntil > Date.now()) throw new Error('simulated partition');
 			await axios.patch(`${CONTROL_API_URL}/tests/${jobId}/status`, payload, {
 				timeout: 8000,
 				headers: { 'x-api-key': WORKER_API_KEY },

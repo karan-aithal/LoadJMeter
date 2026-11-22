@@ -26,6 +26,13 @@ controlApi:
     requests: { cpu: 100m, memory: 128Mi }
     limits:   { cpu: 500m, memory: 256Mi }
 
+# -- Operator chaos controls (dashboard Chaos tab) ----------------------------
+# enabled: unlocks worker crash/drain/partition and the kill-worker experiment (control-api CHAOS_ENABLED).
+# realKill: also lets control-api delete worker pods through the k8s API (adds a ServiceAccount + Role: get/list/delete pods).
+chaos:
+  enabled: false
+  realKill: false
+
 # -- Worker -------------------------------------------------------------------
 worker:
   image: loadtest/worker:latest

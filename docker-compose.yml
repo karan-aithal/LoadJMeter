@@ -117,6 +117,7 @@ services:
       REAPER_INTERVAL_MS: ${REAPER_INTERVAL_MS:-5000}
       OPS_STREAM_MS:      ${OPS_STREAM_MS:-2000}
       RESULTS_DIR:        /results   # chaos/bench JSON for the dashboard's Chaos tab
+      CHAOS_ENABLED:      ${CHAOS_ENABLED:-false}   # unlocks worker crash/drain/partition in the UI (see docker-compose.chaos.yml for real kills)
     volumes:
       - ./docs/benchmarks/results:/results:ro
     healthcheck:

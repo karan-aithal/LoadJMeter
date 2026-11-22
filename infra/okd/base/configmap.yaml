@@ -17,5 +17,8 @@ data:
   # reaper (control-api): worst-case recovery ~ STALE + INTERVAL
   REAPER_STALE_MS: "20000"
   REAPER_INTERVAL_MS: "5000"
+  # Dashboard chaos controls (worker crash/drain/partition, kill-worker experiment). Off by default; "true" + `oc rollout restart deploy/control-api` to enable.
+  # Real pod kills are not offered on OKD: control-api's egress policy has no route to the k8s API. Use infra/scripts/chaos-*.sh for those.
+  CHAOS_ENABLED: "false"
   # K6_PROMETHEUS_RW_SERVER_URL intentionally unset: no Prometheus in v1, and the
   # worker adds `--out experimental-prometheus-rw` whenever it is set.

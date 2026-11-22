@@ -1,10 +1,21 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth.js';
 import { api } from '../api/client.js';
+import useOpsStream from '../hooks/useOpsStream.js';
+import { StreamBar } from '../components/ops-ui.jsx';
+import ChaosLab from '../components/ChaosLab.jsx';
+import { FleetControls, InfraPanel, AuditLog } from '../components/ControlPanels.jsx';
 
 const th = { padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', borderBottom: '1px solid #2d3148' };
 const td = { padding: '8px 12px', fontSize: 13, color: '#e2e8f0', borderBottom: '1px solid #1e2235' };
 const fmt = (n) => (typeof n === 'number' ? `${Number.isInteger(n) ? n : n.toFixed(1)}s` : '—');
+
+const Panel = ({ title, children }) => (
+  <section style={{ background: '#1a1d2e', borderRadius: 8, padding: 16, marginTop: 16 }}>
+    <h3 style={{ fontSize: 14, color: '#7c83fd', marginBottom: 10 }}>{title}</h3>
+    {children}
+  </section>
+);
 
 function Tile({ label, value, sub, color = '#e2e8f0' }) {
   return (
@@ -38,6 +49,8 @@ export default function Chaos() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [open, setOpen] = useState(null);
+  const stream = useOpsStream(token);
+  const snap = stream.data;
 
   const load = useCallback(async () => {
     try { setData(await api.opsChaos(token)); setError(''); } catch (ex) { setError(ex.message); }
@@ -50,6 +63,15 @@ export default function Chaos() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <h2 style={{ fontSize: 16, color: '#e2e8f0' }}>Fault injection</h2>
+        <StreamBar s={stream} />
+      </div>
+      <Panel title="Experiment"><ChaosLab snap={snap} token={token} /></Panel>
+      <Panel title="Workers"><FleetControls fleet={snap ? snap.fleet : []} caps={snap ? snap.capabilities : {}} token={token} /></Panel>
+      <Panel title="Real infrastructure"><InfraPanel caps={snap ? snap.capabilities : {}} token={token} /></Panel>
+      <Panel title="Audit log"><AuditLog token={token} /></Panel>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 32 }}>
         <h2 style={{ fontSize: 16, color: '#e2e8f0' }}>Chaos &amp; recovery runs</h2>
         <button onClick={load} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #2d3148', color: '#94a3b8', padding: '5px 14px', borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>Refresh</button>
       </div>

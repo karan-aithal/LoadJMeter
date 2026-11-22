@@ -32,10 +32,20 @@ export const api = {
   opsChaos:     (token)          => request('GET', '/ops/chaos', undefined, token),
   requeueDlq:   (id, token)      => request('POST', `/ops/dlq/${id}/requeue`, undefined, token),
   purgeDlq:     (id, token)      => request('DELETE', `/ops/dlq/${id}`, undefined, token),
+  settings:     (token)          => request('GET', '/ops/settings', undefined, token),
+  putSettings:  (patch, token)   => request('PUT', '/ops/settings', patch, token),
+  reaperRun:    (token)          => request('POST', '/ops/reaper/run', undefined, token),
+  purgePending: (token)          => request('POST', '/ops/queues/pending/purge', undefined, token),
+  purgeDlqAll:  (token)          => request('POST', '/ops/queues/dlq/purge', undefined, token),
+  requeueDlqAll:(token)          => request('POST', '/ops/queues/dlq/requeue', undefined, token),
+  workerCmd:    (id, cmd, body, token) => request('POST', `/ops/workers/${encodeURIComponent(id)}/${cmd}`, body || {}, token),
+  infra:        (token)          => request('GET', '/ops/infra', undefined, token),
+  infraAction:  (action, body, token) => request('POST', `/ops/infra/${action}`, body, token),
+  audit:        (token)          => request('GET', '/ops/audit', undefined, token),
 };
 
 // SSE feed URL. EventSource can't set headers, so the JWT rides in the query string (see control-api routes/ops.js).
-export const opsStreamUrl = (token) => `${BASE}/ops/stream?token=${encodeURIComponent(token)}`;
+export const opsStreamUrl = (token, ms) => `${BASE}/ops/stream?token=${encodeURIComponent(token)}${ms ? `&ms=${ms}` : ''}`;
 
 // createTest needs the Idempotency-Key header — override fetch call
 api.createTest = async (config, idempotencyKey, token) => {

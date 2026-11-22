@@ -1,0 +1,17 @@
+# Opt-in: lets the dashboard really kill / restart / partition the worker containers.
+#   docker compose -f docker-compose.yml -f docker-compose.chaos.yml up -d control-api
+#
+# WARNING: the Docker socket is root on this host. Anything that can run code in control-api can start a
+# privileged container. Use on a dev machine only; never on a shared or production host.
+# control-api still only acts on containers labelled com.docker.compose.service=worker.
+#
+# DOCKER_GID is the group that owns /var/run/docker.sock (check: stat -c %g /var/run/docker.sock).
+services:
+  control-api:
+    environment:
+      CHAOS_ENABLED: "true"
+      CHAOS_DRIVER: docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-999}"

@@ -10,12 +10,17 @@ const metrics  = require('../metrics');
 const auth     = require('../middleware/auth');
 const logger   = require('../logger');
 const { launch } = require('../runs');
+const settings = require('../ops/settings');
+const workerFleet = require('../ops/workers');
+const reaper   = require('../queue/reaper');
+const control  = require('./ops-control');
 
 const PENDING    = process.env.JOBS_PENDING_QUEUE    || 'jobs:pending';
 const PROCESSING = process.env.JOBS_PROCESSING_QUEUE || 'jobs:processing';
 const DEAD       = process.env.JOBS_DL_QUEUE         || 'jobs:dead-letter';
 const ITEMS      = 50;
 const STREAM_MS  = parseInt(process.env.OPS_STREAM_MS || '2000', 10);
+const clampMs    = (v) => Math.min(60000, Math.max(500, parseInt(v, 10) || STREAM_MS)); // per-connection ?ms=
 const RESULTS_DIR = process.env.RESULTS_DIR || path.resolve(__dirname, '../../../../docs/benchmarks/results');
 
 const operator = [auth, auth.requireRole('operator')];
@@ -40,10 +45,11 @@ function describe(raw) {
 
 async function snapshot() {
   const redis = producer.getClient();
-  const [pl, prl, dl, pend, proc, dead, active, recent] = await Promise.all([
+  const [pl, prl, dl, pend, proc, dead, active, recent, fleet, cfg] = await Promise.all([
     redis.llen(PENDING), redis.llen(PROCESSING), redis.llen(DEAD),
     redis.lrange(PENDING, 0, ITEMS - 1), redis.lrange(PROCESSING, 0, ITEMS - 1), redis.lrange(DEAD, 0, ITEMS - 1),
     repo.listActive(), repo.list({ page: 1, limit: 20 }),
+    workerFleet.list(redis).catch(() => []), settings.load(redis),
   ]);
   const workers = {};
   for (const r of active) {
@@ -59,6 +65,10 @@ async function snapshot() {
       dlq:        { length: dl,  items: dead.map(describe) },
     },
     workers: Object.values(workers),
+    fleet,
+    settings: cfg,
+    reaper: reaper.status,
+    capabilities: control.capabilities(),
     active: active.length,
     recent: recent.items,
     counters: metrics.snapshot(),
@@ -82,7 +92,8 @@ router.get('/stream', tokenFromQuery, ...operator, (req, res) => {
       res.write(`event: failure\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
     }
   };
-  const timer = setInterval(push, STREAM_MS);
+  const ms = clampMs(req.query.ms);
+  const timer = setInterval(push, ms);
   req.on('close', () => clearInterval(timer));
   push();
 });
@@ -166,6 +177,8 @@ function loadChaos(dir = RESULTS_DIR) {
 
 // GET /ops/chaos — recorded chaos/bench runs + aggregate summary (read-only)
 router.get('/chaos', ...operator, (_req, res) => res.json(loadChaos()));
+
+control(router, operator);
 
 module.exports = router;
 module.exports.loadChaos = loadChaos;

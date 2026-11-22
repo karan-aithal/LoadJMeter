@@ -55,9 +55,21 @@ Log in to the UI (JWT, role `operator`). Tabs:
 | Queues | Contents of `jobs:pending` / `jobs:processing` / `jobs:dead-letter`; **Requeue** or **Purge** DLQ entries; reaped and fenced-write counters |
 | Chaos | Recorded worker-kill / partition runs from `docs/benchmarks/results/*.json`: pass rate, lost jobs, duplicate completions, MTTR p50/p95, per-run timeline. Read-only; warns when runs came from different git SHAs |
 
-Live data comes from the SSE feed `GET /api/ops/stream` (every `OPS_STREAM_MS`, default 2000). The browser's `EventSource` cannot set headers, so the JWT goes in `?token=` for that one route (it can appear in access logs). If the stream fails the UI falls back to 3 s polling.
+Live data comes from the SSE feed `GET /api/ops/stream` (every `OPS_STREAM_MS`, default 2000; the UI can pause it and pick 1/2/5/10 s via `?ms=`). The browser's `EventSource` cannot set headers, so the JWT goes in `?token=` for that one route (it can appear in access logs). If the stream fails the UI falls back to polling.
 
-Operator API (JWT `operator` only, documented in `/api-docs`): `GET /ops/queues`, `GET /ops/stream`, `POST /ops/dlq/{id}/requeue`, `DELETE /ops/dlq/{id}`, `GET /ops/chaos`, `POST /tests/{id}/retry`. `PATCH /tests/{id}/status` and the heartbeat require the worker `x-api-key`. `GET /metrics` exposes `reaped_total` and `fenced_writes_total` for Prometheus.
+### Controls (operator)
+
+- **Pipeline**: drag boxes (or focus one and use the arrow keys) to rearrange; the layout is saved in the browser (Reset layout). **Expand** fills the screen (Esc closes). Click a box or a connection for its details (transport, key/endpoint, auth, live numbers) and its controls.
+- **Runtime settings**, edited from the reaper / connection panels and the Queues tab, applied live and shared with the workers through Redis (`ops:settings`; env vars are only the defaults): `reaperPaused`, `reaperStaleMs`, `reaperIntervalMs`, `maxRetries`, `heartbeatIntervalMs` (from the next job), `intakePaused` (new `POST /tests` get 503).
+- **Reaper**: pause/resume, tune, run a pass now. **Queues / DLQ**: requeue all, purge DLQ, purge pending (cancels each run), pause intake.
+- **Workers**: every live worker (idle or busy) reports presence. Commands: pause / resume intake, drain (finish the job, then exit), crash (exit at once), partition (heartbeats and status writes fail for 5-300 s, so the reaper requeues and the fenced worker is rejected on return).
+- **Chaos tab**: a one-click kill-worker experiment (launch a job, kill its worker, time the reaper's recovery), the worker table, a real-infrastructure panel and the audit log.
+
+Safety: crash / drain / partition / infra actions answer 403 unless control-api has `CHAOS_ENABLED=true` (default `false`). The UI asks you to type the action name, and every operator action is written to an audit log (`GET /ops/audit`, shown in the Chaos tab).
+
+Real kills (container / pod) are a second opt-in. Compose: `docker compose -f docker-compose.yml -f docker-compose.chaos.yml up -d control-api` mounts the Docker socket (root on the host: dev machines only) and only ever acts on `worker` containers. Helm: `--set chaos.enabled=true --set chaos.realKill=true` adds a Role limited to pods (kill and restart; partition stays with `infra/scripts/chaos-partition-worker.sh`). OKD gets the soft controls only (`CHAOS_ENABLED` in the ConfigMap).
+
+Operator API (JWT `operator` only, documented in `/api-docs`): `GET /ops/queues`, `GET /ops/stream`, `POST /ops/dlq/{id}/requeue`, `DELETE /ops/dlq/{id}`, `GET /ops/chaos`, `POST /tests/{id}/retry`, plus `GET|PUT /ops/settings`, `POST /ops/reaper/run`, `POST /ops/queues/{pending|dlq}/purge`, `POST /ops/queues/dlq/requeue`, `GET /ops/workers`, `POST /ops/workers/{id}/{cmd}`, `GET /ops/infra`, `POST /ops/infra/{action}`, `GET /ops/audit`. `PATCH /tests/{id}/status` and the heartbeat require the worker `x-api-key`. `GET /metrics` exposes `reaped_total` and `fenced_writes_total` for Prometheus.
 
 Chaos data source: control-api reads `RESULTS_DIR` (compose mounts `docs/benchmarks/results` read-only at `/results`). On OKD run `make okd-results` after new chaos runs (`okd-deploy` does it too).
 

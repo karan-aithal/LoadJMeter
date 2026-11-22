@@ -2,12 +2,14 @@
 
 const axios = require('axios');
 const logger = require('../logger');
+const state = require('../control/state');
 
 const CONTROL_API_URL = process.env.CONTROL_API_URL || 'http://control-api:4000';
 const WORKER_API_KEY = process.env.WORKER_API_KEY || process.env.API_KEY;
 
 async function postHeartbeat(jobId, workerId, epoch) {
 	try {
+		if (state.partitionedUntil > Date.now()) throw new Error('simulated partition');
 		await axios.post(
 			`${CONTROL_API_URL}/tests/${jobId}/heartbeat`,
 			{ workerId, epoch },
@@ -27,7 +29,7 @@ async function postHeartbeat(jobId, workerId, epoch) {
 }
 
 function startHeartbeat(jobId, workerId, epoch, { onFailure, onFenced } = {}) {
-	const intervalMs = parseInt(process.env.HEARTBEAT_INTERVAL_MS || '5000', 10);
+	const intervalMs = parseInt(state.settings.heartbeatIntervalMs || process.env.HEARTBEAT_INTERVAL_MS || '5000', 10);
 	const timer = setInterval(() => {
 		postHeartbeat(jobId, workerId, epoch).catch((err) => {
 			if (err.fenced) {

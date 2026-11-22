@@ -121,10 +121,43 @@ const spec = {
               workerId: { type: 'string' }, runId: { type: 'string' }, epoch: { type: 'integer' },
               lastHeartbeat: { type: 'string', format: 'date-time' } } },
           },
+          fleet: { type: 'array', description: 'Every live worker (idle or busy) from its Redis presence key', items: ref('FleetWorker') },
+          settings: ref('OpsSettings'),
+          reaper: { type: 'object', properties: { lastRunAt: { type: 'string', format: 'date-time', nullable: true }, lastReaped: { type: 'integer' }, runs: { type: 'integer' } } },
+          capabilities: ref('Capabilities'),
           active:  { type: 'integer', description: 'Runs that are pending or running' },
           recent:  { type: 'array', items: ref('TestRun'), description: '20 newest runs' },
           counters: { type: 'object', description: 'In-process, reset on API restart', properties: {
             reaped_total: { type: 'integer' }, fenced_writes_total: { type: 'integer' } } },
+        },
+      },
+      OpsSettings: {
+        type: 'object', description: 'Runtime settings shared with the workers (Redis hash ops:settings); env vars are the defaults',
+        properties: {
+          reaperPaused: { type: 'boolean' }, intakePaused: { type: 'boolean' },
+          reaperStaleMs: { type: 'integer' }, reaperIntervalMs: { type: 'integer' },
+          maxRetries: { type: 'integer' }, heartbeatIntervalMs: { type: 'integer' },
+        },
+      },
+      Capabilities: {
+        type: 'object', properties: {
+          chaos: { type: 'boolean', description: 'CHAOS_ENABLED on the API: gates worker crash/drain/partition and infra actions' },
+          infraDriver: { type: 'string', nullable: true, enum: ['docker', 'k8s'], description: 'Set when real-infra chaos is configured and enabled' },
+        },
+      },
+      FleetWorker: {
+        type: 'object', properties: {
+          workerId: { type: 'string' }, state: { type: 'string', enum: ['idle', 'busy', 'paused', 'draining', 'partitioned', 'unknown'] },
+          runId: { type: 'string', nullable: true }, paused: { type: 'boolean' }, draining: { type: 'boolean' }, pid: { type: 'integer' },
+          lastSeen: { type: 'integer', description: 'epoch ms' }, ageMs: { type: 'integer' },
+          stale: { type: 'boolean', description: 'No presence update for 6s: crashed or cut off' },
+          partitionedUntil: { type: 'integer', nullable: true },
+        },
+      },
+      AuditEntry: {
+        type: 'object', properties: {
+          at: { type: 'string', format: 'date-time' }, actor: { type: 'string' }, action: { type: 'string' },
+          detail: { type: 'object', additionalProperties: true }, result: { type: 'string', enum: ['ok', 'rejected', 'failed'] },
         },
       },
       Stats: {
@@ -257,7 +290,10 @@ const spec = {
         summary: 'Live snapshot feed (Server-Sent Events)', tags: ['Ops'], security: operator,
         description: 'Emits an `OpsSnapshot` as a `data:` frame every OPS_STREAM_MS (default 2000). On a snapshot error it emits an `event: failure` frame and keeps going. ' +
           'Browsers\' EventSource cannot set headers, so the JWT may be passed as `?token=` instead of the Authorization header.',
-        parameters: [{ in: 'query', name: 'token', required: false, schema: { type: 'string' }, description: 'JWT, alternative to the Authorization header' }],
+        parameters: [
+          { in: 'query', name: 'token', required: false, schema: { type: 'string' }, description: 'JWT, alternative to the Authorization header' },
+          { in: 'query', name: 'ms', required: false, schema: { type: 'integer', minimum: 500, maximum: 60000 }, description: 'Frame interval for this connection (default OPS_STREAM_MS)' },
+        ],
         responses: {
           200: { description: 'text/event-stream', content: { 'text/event-stream': { schema: { type: 'string' } } } },
           401: U401, 403: F403,
@@ -281,6 +317,88 @@ const spec = {
           200: resp('Purged', { type: 'object', properties: { purged: { type: 'string' } } }),
           401: U401, 403: F403, 404: resp('Not in the dead-letter queue'), 500: E500,
         },
+      },
+    },
+    '/ops/settings': {
+      get: {
+        summary: 'Runtime settings with their limits', tags: ['Ops'], security: operator,
+        responses: { 200: resp('Current values, schema (min/max/default) and capabilities', { type: 'object', properties: {
+          values: ref('OpsSettings'), schema: { type: 'object', additionalProperties: true }, capabilities: ref('Capabilities') } }), 401: U401, 403: F403 },
+      },
+      put: {
+        summary: 'Change runtime settings', tags: ['Ops'], security: operator,
+        description: 'Partial update, validated against the schema. The reaper applies it on its next pass, workers within ~2s (heartbeat interval from the next job). Audited.',
+        requestBody: { required: true, content: json(ref('OpsSettings')) },
+        responses: { 200: resp('Updated', { type: 'object', properties: { values: ref('OpsSettings') } }), 400: resp('Unknown key or out-of-range value', ref('Error')), 401: U401, 403: F403 },
+      },
+    },
+    '/ops/reaper/run': {
+      post: {
+        summary: 'Run one reaper pass now', tags: ['Ops'], security: operator,
+        description: 'Works while the reaper is paused. Audited.',
+        responses: { 200: resp('Jobs requeued or dead-lettered', { type: 'object', properties: { reaped: { type: 'integer' } } }), 401: U401, 403: F403 },
+      },
+    },
+    '/ops/queues/pending/purge': {
+      post: {
+        summary: 'Cancel and drop up to 200 pending jobs', tags: ['Ops'], security: operator,
+        description: 'Each job is cancelled like `DELETE /tests/{id}` so no run stays pending. Audited.',
+        responses: { 200: resp('Purged', { type: 'object', properties: { purged: { type: 'integer' } } }), 401: U401, 403: F403 },
+      },
+    },
+    '/ops/queues/dlq/purge': {
+      post: {
+        summary: 'Purge up to 200 dead-letter entries', tags: ['Ops'], security: operator,
+        responses: { 200: resp('Purged', { type: 'object', properties: { purged: { type: 'integer' } } }), 401: U401, 403: F403 },
+      },
+    },
+    '/ops/queues/dlq/requeue': {
+      post: {
+        summary: 'Requeue up to 200 dead-letter entries as new runs', tags: ['Ops'], security: operator,
+        responses: { 200: resp('Requeued', { type: 'object', properties: { requeued: { type: 'integer' }, runs: { type: 'array', items: { type: 'string' } } } }), 401: U401, 403: F403 },
+      },
+    },
+    '/ops/workers': {
+      get: {
+        summary: 'Live worker fleet (idle and busy)', tags: ['Ops'], security: operator,
+        responses: { 200: resp('Workers seen in the last minute', { type: 'object', properties: {
+          workers: { type: 'array', items: ref('FleetWorker') }, capabilities: ref('Capabilities') } }), 401: U401, 403: F403 },
+      },
+    },
+    '/ops/workers/{id}/{cmd}': {
+      post: {
+        summary: 'Send a command to one worker (or `*` for all)', tags: ['Ops'], security: operator,
+        description: '`pause` / `resume` stop and start job intake. `drain` (finish the job, then exit), `crash` (exit immediately) and `partition` ' +
+          '(heartbeats and status writes fail for `seconds`, 5-300, default 30) need CHAOS_ENABLED=true on the API. Audited.',
+        parameters: [idParam, { in: 'path', name: 'cmd', required: true, schema: { type: 'string', enum: ['pause', 'resume', 'drain', 'crash', 'partition'] } }],
+        requestBody: { required: false, content: json({ type: 'object', properties: { seconds: { type: 'integer', minimum: 5, maximum: 300 } } }) },
+        responses: { 200: resp('Published', { type: 'object', properties: { sent: { type: 'string' }, target: { type: 'string' }, receivers: { type: 'integer' } } }),
+          400: resp('Bad command or seconds', ref('Error')), 401: U401, 403: F403, 404: resp('Unknown worker') },
+      },
+    },
+    '/ops/infra': {
+      get: {
+        summary: 'Worker containers/pods the chaos driver can act on', tags: ['Ops'], security: operator,
+        responses: { 200: resp('Driver and its workers (empty when no driver is enabled)', { type: 'object', properties: {
+          driver: { type: 'string', nullable: true }, workers: { type: 'array', items: { type: 'object', properties: {
+            id: { type: 'string' }, name: { type: 'string' }, state: { type: 'string' }, status: { type: 'string' } } } } } }), 401: U401, 403: F403 },
+      },
+    },
+    '/ops/infra/{action}': {
+      post: {
+        summary: 'Real infrastructure chaos on a worker', tags: ['Ops'], security: operator,
+        description: 'Needs CHAOS_ENABLED=true plus a configured CHAOS_DRIVER. `docker`: kill, start, restart, partition (disconnect from its networks for `seconds`, then reconnect), heal. ' +
+          '`k8s`: kill and restart only (501 otherwise). The target must be one of the driver\'s listed workers. Audited.',
+        parameters: [{ in: 'path', name: 'action', required: true, schema: { type: 'string', enum: ['kill', 'start', 'restart', 'partition', 'heal'] } }],
+        requestBody: { required: true, content: json({ type: 'object', required: ['target'], properties: { target: { type: 'string' }, seconds: { type: 'integer', minimum: 5, maximum: 300 } } }) },
+        responses: { 200: resp('Done', { type: 'object', properties: { ok: { type: 'boolean' }, result: { type: 'object', nullable: true, additionalProperties: true } } }),
+          400: resp('Bad input', ref('Error')), 401: U401, 403: F403, 404: resp('Not a worker managed by the driver'), 501: resp('No driver, or action unsupported by it'), 502: resp('Driver call failed') },
+      },
+    },
+    '/ops/audit': {
+      get: {
+        summary: 'Operator action log (newest first, last 100)', tags: ['Ops'], security: operator,
+        responses: { 200: resp('Entries', { type: 'object', properties: { entries: { type: 'array', items: ref('AuditEntry') } } }), 401: U401, 403: F403 },
       },
     },
     '/ops/chaos': {

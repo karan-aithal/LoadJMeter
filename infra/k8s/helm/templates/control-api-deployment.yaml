@@ -16,6 +16,9 @@ spec:
       labels:
         app: control-api
     spec:
+      {{- if and .Values.chaos.enabled .Values.chaos.realKill }}
+      serviceAccountName: control-api-chaos
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -29,6 +32,12 @@ spec:
           env:
             - name: PORT
               value: {{ .Values.controlApi.port | quote }}
+            - name: CHAOS_ENABLED
+              value: {{ .Values.chaos.enabled | quote }}
+            {{- if and .Values.chaos.enabled .Values.chaos.realKill }}
+            - name: CHAOS_DRIVER
+              value: k8s
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: loadtest-config
