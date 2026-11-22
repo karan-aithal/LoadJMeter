@@ -16,12 +16,15 @@ const PENDING = process.env.JOBS_PENDING_QUEUE || 'jobs:pending';
 const DEAD    = process.env.JOBS_DL_QUEUE       || 'jobs:dead-letter';
 const BULK_MAX = 200;
 
-const chaosEnabled = () => process.env.CHAOS_ENABLED === 'true';
-const capabilities = () => ({ chaos: chaosEnabled(), infraDriver: chaosEnabled() && infra.driver() ? infra.driver().name : null });
+// the runtime `chaosEnabled` setting (default: CHAOS_ENABLED); read from Redis at most once a second
+const chaosEnabled = async () => (await settings.fresh()).chaosEnabled;
+const capabilities = () => { const on = settings.get().chaosEnabled; return { chaos: on, infraDriver: on && infra.driver() ? infra.driver().name : null }; };
 
-// chaos-class actions are off unless CHAOS_ENABLED=true
-function chaosOnly(_req, res, next) {
-  return chaosEnabled() ? next() : res.status(403).json({ error: 'Chaos controls are disabled (set CHAOS_ENABLED=true on control-api)' });
+// chaos-class actions are off until an operator enables chaos (CHAOS_ENABLED or the Chaos tab toggle)
+async function chaosOnly(_req, res, next) {
+  try {
+    return (await chaosEnabled()) ? next() : res.status(403).json({ error: 'Chaos controls are disabled (enable them in the Chaos tab or set CHAOS_ENABLED=true)' });
+  } catch (err) { return next(err); }
 }
 
 const wrap = (fn) => async (req, res) => {
@@ -97,7 +100,7 @@ module.exports = function mount(router, operator) {
   router.post('/workers/:id/:cmd', ...operator, wrap(async (req, res) => {
     const { id, cmd } = req.params;
     if (!workers.COMMANDS.includes(cmd)) return res.status(400).json({ error: `Unknown command: ${cmd}` });
-    if (workers.DESTRUCTIVE.has(cmd) && !chaosEnabled()) return chaosOnly(req, res);
+    if (workers.DESTRUCTIVE.has(cmd) && !(await chaosEnabled())) return chaosOnly(req, res);
     const redis = producer.getClient();
     if (id !== '*' && !(await workers.list(redis)).some((w) => w.workerId === id)) return res.status(404).json({ error: 'Unknown worker' });
     const args = {};
@@ -111,6 +114,7 @@ module.exports = function mount(router, operator) {
   }));
 
   router.get('/infra', ...operator, wrap(async (_req, res) => {
+    await settings.fresh();
     const d = capabilities().infraDriver && infra.driver();
     res.json({ driver: d ? d.name : null, workers: d ? await d.list() : [] });
   }));

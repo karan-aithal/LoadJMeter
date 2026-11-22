@@ -160,7 +160,7 @@ function Inspector({ sel, snap, schema, token, stream }) {
       {d.actions && <Section name="Queue actions"><QueueActions which={[d.actions]} settings={snap.settings} token={token} /></Section>}
       {d.fleet && <Section name="Workers"><FleetControls fleet={snap.fleet} caps={caps} token={token} /></Section>}
       {d.partition && <Section name="Chaos">
-        <button disabled={busy || !caps.chaos} title={caps.chaos ? undefined : 'Disabled: set CHAOS_ENABLED=true on control-api'} style={btn('#f87171', busy || !caps.chaos)}
+        <button disabled={busy || !caps.chaos} title={caps.chaos ? undefined : 'Disabled: enable chaos in the Chaos tab'} style={btn('#f87171', busy || !caps.chaos)}
                 onClick={() => window.confirm('Cut ALL workers off from control-api for 30s?') && run(() => api.workerCmd('*', 'partition', { seconds: 30 }, token), 'Partitioned all workers for 30s')}>
           Partition all workers (30s)
         </button>

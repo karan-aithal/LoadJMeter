@@ -48,7 +48,7 @@ export function FleetControls({ fleet = [], caps = {}, token }) {
   const [secs, setSecs] = useState(30);
   const send = (id, cmd) => run(() => api.workerCmd(id, cmd, cmd === 'partition' ? { seconds: Number(secs) } : {}, token), (r) => `${cmd} → ${id} (${r.receivers} received)`);
   const go = (id, cmd, chaos) => (chaos ? setAsk({ id, cmd }) : send(id, cmd));
-  const why = caps.chaos ? undefined : 'Disabled: set CHAOS_ENABLED=true on control-api';
+  const why = caps.chaos ? undefined : 'Disabled: enable chaos in the Chaos tab';
   const row = (id, label, w) => (
     <tr key={id}>
       <td style={{ ...td, fontFamily: 'monospace' }}>{label}</td>
@@ -101,7 +101,7 @@ export function InfraPanel({ caps = {}, token }) {
 
   if (!driver) {
     return <p style={{ color: '#64748b', fontSize: 13 }}>
-      Real-infrastructure chaos is off. Enable it with <code>CHAOS_ENABLED=true</code> and a driver (<code>CHAOS_DRIVER=docker</code> via
+      Real-infrastructure chaos is off. Enable chaos above and add a driver (<code>CHAOS_DRIVER=docker</code> via
       {' '}<code>docker-compose.chaos.yml</code>, or <code>k8s</code> via the Helm <code>chaos.enabled</code> value).
     </p>;
   }

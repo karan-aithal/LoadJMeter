@@ -5,6 +5,23 @@ import { btn, input, useAct, Msg, TypeConfirm } from './ops-ui.jsx';
 
 const fmt = (ms) => (ms == null ? '…' : `${(ms / 1000).toFixed(1)}s`);
 
+// Master switch for chaos-class actions (crash/drain/partition/infra). Runtime setting `chaosEnabled`; CHAOS_ENABLED is its default.
+// Turning on needs a typed confirmation; turning off is immediate. Both are audited by PUT /ops/settings.
+function ChaosSwitch({ on, token }) {
+  const { busy, msg, run } = useAct();
+  const [ask, setAsk] = useState(false);
+  const set = (v) => run(() => api.putSettings({ chaosEnabled: v }, token), v ? 'Chaos enabled' : 'Chaos disabled');
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: '#12141f', border: `1px solid ${on ? '#f87171' : '#2d3148'}` }}>
+      <span style={{ fontSize: 13, color: on ? '#f87171' : '#94a3b8' }}>● Chaos {on ? 'ENABLED' : 'disabled'}</span>
+      <span style={{ fontSize: 12, color: '#64748b', flex: 1 }}>{on ? 'Workers can be crashed, drained, partitioned or killed.' : 'Crash, drain, partition and real kills are blocked until you enable chaos.'}</span>
+      <button disabled={busy} style={btn(on ? '#4ade80' : '#f87171', busy)} onClick={() => (on ? set(false) : setAsk(true))}>{on ? 'Disable chaos' : 'Enable chaos'}</button>
+      <Msg msg={msg} />
+      {ask && <TypeConfirm title="Enable chaos controls?" word="enable" onCancel={() => setAsk(false)} onConfirm={() => { setAsk(false); set(true); }} />}
+    </div>
+  );
+}
+
 // One-click "kill the worker mid-job" experiment, the same scenario as infra/scripts/chaos-kill-worker.sh:
 //   launch a job -> wait until a worker runs it -> kill that worker -> watch the reaper requeue it -> retry completes.
 // Timings are client-side from the live stream (frame interval granularity), like the script's polls. Not persisted.
@@ -49,9 +66,7 @@ export default function ChaosLab({ snap, token }) {
   const live = exp && exp.phase !== 'done';
   return (
     <div>
-      {!caps.chaos && <p style={{ color: '#fbbf24', fontSize: 13, marginBottom: 10 }}>
-        ⚠ Chaos is disabled on this API. Set <code>CHAOS_ENABLED=true</code> on control-api (compose: in <code>.env</code>) and recreate it to enable crash, drain, partition and the experiment below.
-      </p>}
+      <ChaosSwitch on={!!caps.chaos} token={token} />
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, color: '#e2e8f0' }}>Kill-worker experiment:</span>
         <select aria-label="Kill method" value={via} onChange={(e) => setVia(e.target.value)} style={input}>

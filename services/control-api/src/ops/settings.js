@@ -15,6 +15,8 @@ const SCHEMA = {
   maxRetries:          { type: 'int', min: 1,    max: 10,     def: env('MAX_RETRIES', 3),              desc: 'Attempts before a job is dead-lettered' },
   heartbeatIntervalMs: { type: 'int', min: 1000, max: 30000,  def: env('HEARTBEAT_INTERVAL_MS', 5000), desc: 'Worker heartbeat period (applies from the next job)' },
   intakePaused:        { type: 'bool', def: false,                              desc: 'Reject new POST /tests with 503' },
+  // gates crash/drain/partition and infra actions; CHAOS_ENABLED is only the default, an operator can flip it from the UI
+  get chaosEnabled() { return { type: 'bool', def: process.env.CHAOS_ENABLED === 'true', desc: 'Unlock worker crash/drain/partition and infra chaos' }; },
 };
 
 const defaults = () => Object.fromEntries(Object.entries(SCHEMA).map(([k, s]) => [k, s.def]));

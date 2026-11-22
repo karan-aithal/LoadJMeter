@@ -134,7 +134,7 @@ const spec = {
       OpsSettings: {
         type: 'object', description: 'Runtime settings shared with the workers (Redis hash ops:settings); env vars are the defaults',
         properties: {
-          reaperPaused: { type: 'boolean' }, intakePaused: { type: 'boolean' },
+          reaperPaused: { type: 'boolean' }, intakePaused: { type: 'boolean' }, chaosEnabled: { type: 'boolean' },
           reaperStaleMs: { type: 'integer' }, reaperIntervalMs: { type: 'integer' },
           maxRetries: { type: 'integer' }, heartbeatIntervalMs: { type: 'integer' },
         },

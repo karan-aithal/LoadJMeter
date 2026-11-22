@@ -65,7 +65,7 @@ Live data comes from the SSE feed `GET /api/ops/stream` (every `OPS_STREAM_MS`, 
 - **Workers**: every live worker (idle or busy) reports presence. Commands: pause / resume intake, drain (finish the job, then exit), crash (exit at once), partition (heartbeats and status writes fail for 5-300 s, so the reaper requeues and the fenced worker is rejected on return).
 - **Chaos tab**: a one-click kill-worker experiment (launch a job, kill its worker, time the reaper's recovery), the worker table, a real-infrastructure panel and the audit log.
 
-Safety: crash / drain / partition / infra actions answer 403 unless control-api has `CHAOS_ENABLED=true` (default `false`). The UI asks you to type the action name, and every operator action is written to an audit log (`GET /ops/audit`, shown in the Chaos tab).
+Safety: crash / drain / partition / infra actions answer 403 until chaos is enabled. Enable it from the **Chaos tab** ("Enable chaos", needs a typed confirmation; stored as the runtime setting `chaosEnabled`, applies at once, "Disable chaos" reverts) or set `CHAOS_ENABLED=true` on control-api as the default (`false` out of the box). The UI asks you to type the action name, and every operator action is written to an audit log (`GET /ops/audit`, shown in the Chaos tab).
 
 Real kills (container / pod) are a second opt-in. Compose: `docker compose -f docker-compose.yml -f docker-compose.chaos.yml up -d control-api` mounts the Docker socket (root on the host: dev machines only) and only ever acts on `worker` containers. Helm: `--set chaos.enabled=true --set chaos.realKill=true` adds a Role limited to pods (kill and restart; partition stays with `infra/scripts/chaos-partition-worker.sh`). OKD gets the soft controls only (`CHAOS_ENABLED` in the ConfigMap).
 

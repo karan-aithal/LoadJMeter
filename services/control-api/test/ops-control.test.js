@@ -20,9 +20,11 @@ const AUTH = `Bearer ${jwt.sign({ sub: 'op', role: 'operator' }, process.env.JWT
 const post = (path, body) => request(app).post(path).set('Authorization', AUTH).send(body || {});
 
 let redis;
-beforeEach(() => {
+const enableChaos = async () => { redis.hgetall.mockResolvedValue({ chaosEnabled: 'true' }); await settings.load(redis); };
+beforeEach(async () => {
   jest.clearAllMocks();
   delete process.env.CHAOS_ENABLED;
+  delete process.env.CHAOS_DRIVER;
   redis = {
     hgetall: jest.fn().mockResolvedValue({}), hset: jest.fn().mockResolvedValue(1),
     lpush: jest.fn().mockResolvedValue(1), ltrim: jest.fn().mockResolvedValue('OK'), lrange: jest.fn().mockResolvedValue([]),
@@ -31,6 +33,7 @@ beforeEach(() => {
     mget: jest.fn().mockResolvedValue([JSON.stringify({ workerId: 'w1', state: 'idle', lastSeen: Date.now() })]),
   };
   producer.getClient.mockReturnValue(redis);
+  await settings.load(redis);
   producer.markCancelled.mockResolvedValue();
   repo.cancel.mockResolvedValue({});
 });
@@ -47,6 +50,21 @@ describe('PUT /ops/settings', () => {
     const r = await request(app).put('/ops/settings').set('Authorization', AUTH).send(body);
     expect(r.status).toBe(400);
     expect(redis.hset).not.toHaveBeenCalled();
+  });
+});
+
+describe('chaos toggle', () => {
+  it('env sets the default and PUT /ops/settings flips it at runtime', async () => {
+    expect((await post('/ops/workers/w1/crash')).status).toBe(403);
+    expect((await request(app).put('/ops/settings').set('Authorization', AUTH).send({ chaosEnabled: true })).status).toBe(200);
+    expect((await post('/ops/workers/w1/crash')).status).toBe(200);
+    expect((await request(app).put('/ops/settings').set('Authorization', AUTH).send({ chaosEnabled: false })).status).toBe(200);
+    expect((await post('/ops/workers/w1/crash')).status).toBe(403);
+  });
+  it('CHAOS_ENABLED=true is the default when nothing is stored', async () => {
+    process.env.CHAOS_ENABLED = 'true';
+    await settings.load(redis);
+    expect((await post('/ops/workers/w1/crash')).status).toBe(200);
   });
 });
 
@@ -72,11 +90,11 @@ describe('worker commands', () => {
   it('crash / drain / partition are 403 until CHAOS_ENABLED', async () => {
     for (const c of ['crash', 'drain', 'partition']) expect((await post(`/ops/workers/w1/${c}`)).status).toBe(403);
     expect(redis.publish).not.toHaveBeenCalled();
-    process.env.CHAOS_ENABLED = 'true';
+    await enableChaos();
     expect((await post('/ops/workers/w1/crash')).status).toBe(200);
   });
   it('rejects unknown workers, unknown commands and bad partition seconds', async () => {
-    process.env.CHAOS_ENABLED = 'true';
+    await enableChaos();
     expect((await post('/ops/workers/ghost/pause')).status).toBe(404);
     expect((await post('/ops/workers/w1/explode')).status).toBe(400);
     expect((await post('/ops/workers/w1/partition', { seconds: 1 })).status).toBe(400);
@@ -87,7 +105,7 @@ describe('worker commands', () => {
 describe('infra chaos', () => {
   it('is 403 unless CHAOS_ENABLED, 501 with no driver', async () => {
     expect((await post('/ops/infra/kill', { target: 'x' })).status).toBe(403);
-    process.env.CHAOS_ENABLED = 'true';
+    await enableChaos();
     delete process.env.CHAOS_DRIVER;
     expect((await post('/ops/infra/kill', { target: 'x' })).status).toBe(501);
   });
